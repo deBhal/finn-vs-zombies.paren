@@ -1,0 +1,54 @@
+;;; This is the persistent immutable state of the application.
+;;; It has two key purposes:
+;;; 1) Manage the current state (get)
+;;; 2) Create new states (set)
+;;; 3) Manage the history (save)
+
+;;; To make it super easy and convenient to use, I want to do a weird hybrid
+;;; where you can pretend that you're just mutating a thing and not worry about
+;;; what's going on.
+
+;;; This implies an implimentation where every time you set a value, I'm going
+;;; to save off that updated state as the new state. Note that this wrecks any
+;;; promises about concurrency. What we're buying is cheap history and easy API
+
+;;; The history is really just more immutable state, and we could just rely
+;;; on garbage collection, but I think separate API is going to make it easeir
+;;; on my brain
+
+(setf cast-array (@ _ "castArray"))
+
+((ps:getprop console 'log) "state.paren: Trident is working as expected")
+(defvar initial-state ((@ +Immutable +Map) (create "time" 0)))
+(defvar initial-history ((@ +Immutable +List)))
+
+(defun init-state ()
+  (setf *state* initial-state))
+(defun init-history ()
+  (setf *history* initial-history)
+  (save))
+
+(defun get (path)
+  ((@ *state* "getIn") (cast-array path)))
+
+(defun set (path value)
+  "set '(:player :x) 12"
+  ;; Should I strip the list out of the signature?
+  (setf *state* ((@ *state* "setIn") (cast-array path) value)))
+
+(let* ((path '("a" "b"))
+       (result (get path (set path 12))))
+  (unless (= 12 result)
+    (throw (+error result))))
+
+(defun save ()
+  (setf *history* ((@ *history* set) (get "time") *state*)))
+
+(init-state)
+(init-history)
+
+(defun tick ()
+  (set "time" (+ 1 (get "time"))))
+
+(tick)
+(save)
