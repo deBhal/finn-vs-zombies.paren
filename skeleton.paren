@@ -1,44 +1,53 @@
 (quote
+ ;; Setup skewer
  (progn
-   ;; Setup skewer
-   (progn
-     (setq httpd-port 8081)  ; I'm already using the default port 8080
-     (httpd-serve-directory (format "%s" default-directory))
-     (browse-url (format "http://127.0.0.1:%d/index.html" httpd-port))
-     (slime-mode)
-     (trident-mode)
-     (steal-slime-keys-for-trident!)
-     (slime-eval '(ql:quickload :parenscript))
-     (slime-eval "hi")
-     ;; (slime-eval 'cl:*package*)
-     ;; The # character in the printed package name fouls up something in the
-     ;; connection, so we need to suppress that response.
-     ;; So slime-eval runs in the swank-io package, which would appear not to
-     ;; use the common lisp package.
-     (slime-eval '(cl:and
-                           (cl:defpackage :skeleton
-                             (:use :common-lisp :parenscript))
-                   "Created Package Skeleton")
-                 )
-
-     (slime-eval '(cl:progn
-                   (cl:in-package :skeleton)
-                   (cl:use-package :parenscript)
-                   ))
-     (slime-repl-set-package :skeleton)
- ;; ^^ (C-c m e) Here for all that
- )
+   (setq httpd-port 8081)  ; I'm already using the default port 8080
+   (httpd-serve-directory (format "%s" default-directory))
+   (browse-url (format "http://127.0.0.1:%d/index.html" httpd-port))
+   (slime-mode)
+   (trident-mode)
+   (steal-slime-keys-for-trident!)
+   ;; ^^ (C-c m e) Here for all that doesn't work :( need to do the package stuff separately at least
+   ))
 
 (quote
  (progn
-   (in-package :skeleton)
-   (use-package :parenscript)
-   )
- ;; ^^ (M-x slime-eval-last-expression) here
- )
+   ;; Setup skewer
+   ;; ^^ (C-c m e) each of these individually
+   (slime-eval '(ql:quickload :parenscript))
+   (slime-eval '(ql:quickload :cl-react))
+   ;; We also need to (cl-react:build) and send the results to the browser
+   ;; We might precompile and serve this statically
+   ;; You can confirm this worked by checking the browser for
+   ;; cl_react_createClass, cl_react_createElement, etc
+   (skewer-eval (slime-eval '(cl-react:build)) #'skewer-post-minibuffer)
+   ;;
+   ;; (slime-eval 'cl:*package*)
+   ;; The # character in the printed package name fouls up something in the
+   ;; connection, so we need to suppress that response.
+   ;; So slime-eval runs in the swank-io package, which would appear not to
+   ;; use the common lisp package.
+   (slime-eval '(cl:and
+                 (cl:defpackage :skeleton
+                   (:use :common-lisp :parenscript))
+                 "Created Package Skeleton")
+               )
 
+   (slime-eval '(cl:progn
+                 (cl:in-package :skeleton)
+                 (cl:use-package :parenscript)
+                 ))
+   (slime-repl-set-package :skeleton)
+   ))
+
+;; (quote
+;;  (progn
+;;    (in-package :skeleton)
+;;    (use-package :parenscript)
+;;    )
+;;  ;; ^^ (M-x slime-eval-last-expression) here
+;;  )
 
 ((ps:getprop console 'log) "Trident is working as expected")
 
-(defun get-element-by-id (id)
-  ((@ document "getElementById") id))
+;; OK: Switch to react-app now to try and make cl-react work
