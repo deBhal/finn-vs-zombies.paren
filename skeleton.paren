@@ -48,6 +48,11 @@
 ;;  ;; ^^ (M-x slime-eval-last-expression) here
 ;;  )
 
-((ps:getprop console 'log) "Trident is working as expected")
+
+(defun clog (&rest args)
+  (apply (@ console log) args))
+
+;((ps:getprop console 'log) "Trident is working as expected")
+(clog "Trident is working as expected")
 
 ;; OK: Switch to react-app now to try and make cl-react work
