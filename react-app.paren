@@ -1,0 +1,101 @@
+;;; Some convenience re-defines
+(defvar react-dom +react-d-o-m)
+(defun get-element-by-id (id)
+  ((@ document "getElementById") id))
+
+(quote
+ ;; Wow. I can change how lisp capitalizes things as it evaluates them.
+ ;; Do I really want to do this? I think for now I'll refrain
+ ;; https://github.com/l04m33/parenscript-react-examples/blob/104063d1b73ef4ed41c04817d8b9bae9a1e0948f/ps-compile.lisp#L40
+ (progn
+   (readtable-case *readtable*) ; :UPCASE
+   (setf (readtable-case *readtable*) :invert)
+   (setf (readtable-case *readtable*) :upcase))
+ ) ; M-x slime-eval-last-expression
+
+(setf container (get-element-by-id "root"))
+
+(defun state-observer ()
+  ((@ *JSON* stringify) (list "The first zombie:" a-zombie
+                              "\nA group of zombies:" zombies))  )
+
+(defun app (props)
+  (let ((zombies (or (@ props zombies)))))
+    (cl-react:psx
+     (:div
+      (:img :key :pea :src "./assets/pea-shooter-pixelated.png"
+            :style (create :position :relative))
+;      (zombie)
+      (zombie a-zombie)
+      (shot a-shot)
+      (state-observer)
+      )))
+
+(setf a-shot (create :x 120 :y 65))
+
+(defun shot (props)
+;  (clog props)
+  (with-slots (x y) (@ props children) ; hmm.....
+    (cl-react:psx
+     (:img :src "./assets/pea.png"
+           :style (create :position :relative
+                          :float :left
+                          :left (px x)
+                          :top (px y)
+                          )))))
+
+
+(setf (@ container onclick) #'reset-zombie)
+
+(defun walk ()
+  (setf (@ a-zombie x) (- (@ a-zombie x) 1))
+  )
+(walk)
+
+(defun zombie (b-zombie)
+  (let ((x (@ a-zombie x)))
+    (cl-react:psx (:img :key :zombie
+                        :position "relative"
+                        :src "./assets/zombie.png"
+                        :style (create :left (px x)
+                                       :position "relative"
+                                       :margin-left (px -100))))))
+
+(setf app-state (create ))
+(setf app-state (create :title "Finn vs Zombies"))
+
+(defun render ()
+  (chain react-dom (render (app app-state)
+                           container)))
+
+(defun px (n)
+  (+ n "px"))
+
+
+;;; Right, so react has changed, and cl-react.psx:compile-node is not correct.
+;;; ReactDOM.a is not a function any more, you need React.createElement('a')
+;;; I've fixed this in the local-projects folder, but I think ql:quickload is still
+;;; picking up an old broken version, I just need to find where it is and get rid of it
+;;(cl-react:psx (p "Hello?"))
+(quote ;lisp
+ (ps:ps
+   (cl-react:psx
+    (:a :href "http://www.google.com"
+        (:span :class "text-green" "Click here!")))))
+(setf (@ app-state running) (not (@ app-state running)))
+
+(defun update (app-state)
+  app-state)
+
+(defun tick ()
+    (walk)
+    (auto-reset-zombie)
+    (setf app-state (update app-state)))
+
+(defun main-loop ()
+  (tick)
+  (render))
+
+(main-loop)
+
+(setf *main-loop-interval* (set-interval #'main-loop 10))
