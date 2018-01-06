@@ -52,4 +52,6 @@
 
 (clog "Trident is working as expected")
 
-;; OK: Switch to react-app now to try and make cl-react work
+;;; Global setup
+
+;; OK: now load mithril-app.paren and then state.paren

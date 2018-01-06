@@ -65,6 +65,7 @@
 ;;; State
 (defun init-state ()
   (setf *state* initial-state)
+  (setf a-shot (create :x 120 :y 65))
   (init-zombie)
   (init-zombies)
   (setf (@ *state* reset-zombie) #'reset-zombie)
@@ -83,9 +84,6 @@
 
 (init-state)
 
-(setf lodash _)
-(import map from lodash)
-(map #'update-zombie (@ *state* zombies))
 
 (walk)
 (auto-reset-zombie)
@@ -108,7 +106,9 @@
   (if (@ *state* running)
       (progn
         (tick)
-        (render)))
+        (and (defined render) (render))
+        (and (defined mrender) (mrender))
+        ))
   (request-animation-frame #'main-loop))
 
 (main-loop)

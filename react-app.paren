@@ -7,6 +7,9 @@
 (defun get-element-by-id (id)
   ((@ document "getElementById") id))
 
+(setf lodash _)
+(setf map (@ lodash map))
+
 (quote
  ;; Wow. I can change how lisp capitalizes things as it evaluates them.
  ;; Do I really want to do this? I think for now I'll refrain
