@@ -7,21 +7,16 @@
    (slime-mode)
    (trident-mode)
    (steal-slime-keys-for-trident!)
-   ;; ^^ (C-c m e) Here for all that doesn't work :( need to do the package stuff separately at least
-   ))
+   )
+ ;; ^^ (C-c m e) Here for all that
+ )
 
 (quote
  (progn
    ;; Setup skewer
-   ;; ^^ (C-c m e) each of these individually
    (slime-eval '(ql:quickload :parenscript))
    (slime-eval '(ql:quickload :cl-react))
-   ;; We also need to (cl-react:build) and send the results to the browser
-   ;; We might precompile and serve this statically
-   ;; You can confirm this worked by checking the browser for
-   ;; cl_react_createClass, cl_react_createElement, etc
-   (skewer-eval (slime-eval '(cl-react:build)) #'skewer-post-minibuffer)
-   ;;
+
    ;; (slime-eval 'cl:*package*)
    ;; The # character in the printed package name fouls up something in the
    ;; connection, so we need to suppress that response.
@@ -34,11 +29,31 @@
                )
 
    (slime-eval '(cl:progn
+                 (cl:defpackage :skeleton
+                   (:use :common-lisp :parenscript))
                  (cl:in-package :skeleton)
                  (cl:use-package :parenscript)
-                 ))
+                 "Created Package Skeleton"
+                 ;; I suspect this doesn't all work
+
+                 (ps:defpsmacro import (symbol from library)
+                   `(setf ,symbol (getprop ,library ,(SYMBOL-TO-JS-STRING symbol))))
+
+                 )
+               )
+
+
    (slime-repl-set-package :skeleton)
-   ))
+
+   ;; We also need to (cl-react:build) and send the results to the browser
+   ;; We might precompile and serve this statically
+   ;; You can confirm this worked by checking the browser for
+   ;; cl_react_createClass, cl_react_createElement, etc
+   (skewer-eval (slime-eval '(cl-react:build)) #'skewer-post-minibuffer)
+
+   )
+ ;; Seems like we need to (C-c m e) each of these individually
+ )
 
 ;; (quote
 ;;  (progn
@@ -47,7 +62,6 @@
 ;;    )
 ;;  ;; ^^ (M-x slime-eval-last-expression) here
 ;;  )
-
 
 (defun clog (&rest args)
   (apply (@ console log) args))

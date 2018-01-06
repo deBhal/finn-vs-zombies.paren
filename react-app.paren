@@ -1,3 +1,7 @@
+;;; Note: react has changed since cl-react.psx:compile-node
+;;; ReactDOM.a is not a function any more, you need React.createElement('a')
+;;; I've only fixed this in my local-projects folder.
+
 ;;; Some convenience re-defines
 (defvar react-dom +react-d-o-m)
 (defun get-element-by-id (id)
@@ -15,20 +19,24 @@
 
 (setf container (get-element-by-id "root"))
 
-(defun state-observer ()
-  ((@ *JSON* stringify) (list "The first zombie:" a-zombie
-                              "\nA group of zombies:" zombies))  )
+(defun state-observer (state)
+  (let ((state-string ((@ *JSON* stringify) (list "The first zombie:" a-zombie
+                                                  "STATE:" state) () 2))))
+  (cl-react:psx (:pre state-string )))
 
 (defun app (props)
-  (let ((zombies (or (@ props zombies)))))
+  (let ((zombies (or (@ props zombies)))
+        (reset-zombie (@ props reset-zombie))))
     (cl-react:psx
      (:div
+
       (:img :key :pea :src "./assets/pea-shooter-pixelated.png"
             :style (create :position :relative))
 ;      (zombie)
       (zombie a-zombie)
       (shot a-shot)
-      (state-observer)
+      (:hr)
+      (state-observer props)
       )))
 
 (setf a-shot (create :x 120 :y 65))
@@ -44,14 +52,6 @@
                           :top (px y)
                           )))))
 
-
-(setf (@ container onclick) #'reset-zombie)
-
-(defun walk ()
-  (setf (@ a-zombie x) (- (@ a-zombie x) 1))
-  )
-(walk)
-
 (defun zombie (b-zombie)
   (let ((x (@ a-zombie x)))
     (cl-react:psx (:img :key :zombie
@@ -61,41 +61,9 @@
                                        :position "relative"
                                        :margin-left (px -100))))))
 
-(setf app-state (create ))
-(setf app-state (create :title "Finn vs Zombies"))
-
 (defun render ()
-  (chain react-dom (render (app app-state)
+  (chain react-dom (render (app *state*)
                            container)))
 
 (defun px (n)
   (+ n "px"))
-
-
-;;; Right, so react has changed, and cl-react.psx:compile-node is not correct.
-;;; ReactDOM.a is not a function any more, you need React.createElement('a')
-;;; I've fixed this in the local-projects folder, but I think ql:quickload is still
-;;; picking up an old broken version, I just need to find where it is and get rid of it
-;;(cl-react:psx (p "Hello?"))
-(quote ;lisp
- (ps:ps
-   (cl-react:psx
-    (:a :href "http://www.google.com"
-        (:span :class "text-green" "Click here!")))))
-(setf (@ app-state running) (not (@ app-state running)))
-
-(defun update (app-state)
-  app-state)
-
-(defun tick ()
-    (walk)
-    (auto-reset-zombie)
-    (setf app-state (update app-state)))
-
-(defun main-loop ()
-  (tick)
-  (render))
-
-(main-loop)
-
-(setf *main-loop-interval* (set-interval #'main-loop 10))

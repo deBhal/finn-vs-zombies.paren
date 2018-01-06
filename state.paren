@@ -1,25 +1,41 @@
 ((ps:getprop console 'log) "state.paren: Trident is working as expected")
 
+(setf zombies (list (create-zombie)))
 (defvar initial-state
-  (create "time" 0
-          "zombie" (create-zombie)))
+  (create :title "Finn vs Zombies"
+          :running true
+          "time" 0
+          "zombie" (create-zombie)
+          "zombies" (list (create-zombie) (create-zombie :x 800))))
 
 (defvar *shot-speed* 10)
 
 ;;; Zombie
-(defun create-zombie ()
-  (create :x 1200 :health 10))
+(defun create-zombie (&optional (x 1200))
+  (create :x x
+          :health 10))
 
 (defun init-zombie ()
   (setf a-zombie (create-zombie)))
 
+(defun init-zombies ()
+  (setf (@ *state* zombies) (list (create-zombie) (create-zombie 800))))
+
+
 (defun deadp (zombie)
-  (or (<= (@ a-zombie x) 0)
+  (or (<= (@ a-zombie x) 71) ; temporary zombie auto-reset trigger
       (<= (@ a-zombie health) 0)))
 
 (defun auto-reset-zombie ()
   (if (deadp a-zombie)
       (reset-zombie)))
+
+(defun walk ()
+  (setf (@ a-zombie x) (- (@ a-zombie x) 1))
+  )
+
+(defun reset-zombie ()
+  (setf a-zombie (create-zombie)))
 
 ;;; shot
 
@@ -46,16 +62,36 @@
       (progn (update-zombie-hit-by-shot)
              (reset-shot))))
 
-
 ;;; State
 (defun init-state ()
   (setf *state* initial-state)
   (init-zombie)
+  (init-zombies)
+  (setf (@ *state* reset-zombie) #'reset-zombie)
+  )
+
+(defun update-zombie (zombie)
+  (setf (@ zombie x) (+ (@ zombie x) 1)))
+
+(defun update-zombies ()
+  ;(setf (@ state zombies))
+  )
+
+(defun play-pause ()
+  (setf (@ *state* running) (not (@ *state* running)))
   )
 
 (init-state)
 
+(setf lodash _)
+(import map from lodash)
+(map #'update-zombie (@ *state* zombies))
+
+(walk)
+(auto-reset-zombie)
+
 (defun tick ()
+  "update all the things"
   (setf (@ *state* time) (+ 1 (@ *state* time)))
   (setf (@ a-zombie x) (- (@ a-zombie x) 1))
   (update-shot)
@@ -63,12 +99,16 @@
   (auto-reset-shot)
 )
 
-
 (tick)
-(save)
-
-
-(defun reset-zombie ()
-  (setf a-zombie (create-zombie)))
 
 (reset-zombie)
+
+; UI Glue, depends on react-app.paren
+(defun main-loop ()
+  (if (@ *state* running)
+      (progn
+        (tick)
+        (render)))
+  (request-animation-frame #'main-loop))
+
+(main-loop)
