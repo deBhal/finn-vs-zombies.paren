@@ -1,41 +1,55 @@
 ((ps:getprop console 'log) "state.paren: Trident is working as expected")
 
-(setf zombies (list (create-zombie)))
+;; external dependencies
+(setf mapcar (@ *R* map))
+
+(defun generate-new-zombie-index ()
+  (setf (@ *state* zombie-index) (+ 1 (@ *state* zombie-index))))
+
 (defvar initial-state
   (create :title "Finn vs Zombies"
           :running true
           "time" 0
-          "zombie" (create-zombie)
-          "zombies" (list (create-zombie) (create-zombie :x 800))))
+          "zombieIndex" 0
+          "zombies" (create)))
 
 (defvar *shot-speed* 10)
 
 ;;; Zombie
-(defun create-zombie (&optional (x 1200))
-  (create :x x
-          :health 10))
+(defun randomIntBelow (n)
+  (chain +Math (floor (* n ((@ +Math random))))))
 
-(defun init-zombie ()
-  (setf a-zombie (create-zombie)))
+(defun create-zombie! (&optional (x 1200))
+  (let* ((index (generate-new-zombie-index))
+         (zombie (create :x x
+          :y (- 10 (randomIntBelow 20))
+          :health 10
+          :index index)))
+    (setf (getprop *state* :zombies index) zombie)
+    zombie))
+
 
 (defun init-zombies ()
-  (setf (@ *state* zombies) (list (create-zombie) (create-zombie 800))))
+  (mapcar create-zombie! (list ;0 90 300 600
+                               900)))
 
 
 (defun deadp (zombie)
-  (or (<= (@ a-zombie x) 71) ; temporary zombie auto-reset trigger
-      (<= (@ a-zombie health) 0)))
+  (or ;(<= (@ zombie x) 0) ; temporary zombie auto-reset trigger
+      (<= (@ zombie health) 0)))
 
-(defun auto-reset-zombie ()
-  (if (deadp a-zombie)
-      (reset-zombie)))
+(defun auto-reset-zombie (zombie)
+  (if (deadp zombie)
+      (reset-zombie zombie)
+      zombie))
 
-(defun walk ()
-  (setf (@ a-zombie x) (- (@ a-zombie x) 1))
+(defun walk (zombie)
+  (setf (@ zombie x) (- (@ zombie x) 1))
+  zombie
   )
 
-(defun reset-zombie ()
-  (setf a-zombie (create-zombie)))
+(defun reset-zombie (zombie)
+  ((@ +object assign) zombie (create :x 1200 :health 10)))
 
 ;;; shot
 
@@ -58,57 +72,88 @@
   )
 
 (defun auto-reset-shot ()
-  (if (<= (@ a-zombie x) (@ a-shot x))
-      (progn (update-zombie-hit-by-shot)
-             (reset-shot))))
+  (if (<= 1200 (@ a-shot x)) (reset-shot)
+      a-shot))
 
 ;;; State
-(defun init-state ()
-  (setf *state* initial-state)
+(defun init-state! ()
+  (setf *state* (chain +object (assign (create) initial-state)))
+
   (setf a-shot (create :x 120 :y 65))
+
   (init-zombie)
   (init-zombies)
-  (setf (@ *state* reset-zombie) #'reset-zombie)
+  (setf (@ *state* callbacks) (create :create-zombie (lambda () (create-zombie!))))
+  *state*
   )
 
 (defun update-zombie (zombie)
-  (setf (@ zombie x) (+ (@ zombie x) 1)))
+  ;; Sorry mutation
+  (setf (@ zombie x) (- (@ zombie x) 1))
+
+  (auto-reset-zombie zombie)
+  )
 
 (defun update-zombies ()
-  ;(setf (@ state zombies))
+  (setf (@ *state* zombies) (mapcar update-zombie (@ *state* zombies)))
   )
 
 (defun play-pause ()
   (setf (@ *state* running) (not (@ *state* running)))
   )
 
-(init-state)
+(init-state!)
 
+(setf min-by (@ *R* min-by))
+(setf prop (@ *R* prop))
+(setf reduce (@ *R* reduce))
+(setf obj-values (@ *R* values))
 
-(walk)
-(auto-reset-zombie)
+(defun left-most (zombies)
+  (reduce (min-by (prop :x)) (create :x +infinity) (obj-values zombies)))
 
-(defun tick ()
+(defun calculate-collisions ()
+  (let ((collisions '())
+        (front-zombie (left-most (@ *state* zombies))))
+
+    (if (<= (@ front-zombie x) (@ a-shot x))
+        (progn
+          (reset-shot)
+          (list (create :shot a-shot :zombie front-zombie)))
+        (list))))
+
+(defun process-collision! (collision)
+  (with-slots (shot zombie) collision
+    (let* ((index (@ zombie :index))
+           (the-zombie (getprop *state* :zombies index))
+           (health (@ the-zombie :health)))
+         (setf (@ *state* 0) (list index health))
+    (setf (getprop *state* :zombies index :health) (- health 1)))))
+
+(defun process-collisions! ()
+  (mapcar process-collision! (@ *state* :collisions))
+  )
+
+(defun tick! ()
   "update all the things"
   (setf (@ *state* time) (+ 1 (@ *state* time)))
-  (setf (@ a-zombie x) (- (@ a-zombie x) 1))
+  (update-zombies)
   (update-shot)
-  (auto-reset-zombie)
+  (setf (@ *state* :collisions) (calculate-collisions))
+  (process-collisions!)
   (auto-reset-shot)
 )
 
-(tick)
-
-(reset-zombie)
+(tick!)
 
 ; UI Glue, depends on react-app.paren
 (defun main-loop ()
   (if (@ *state* running)
-      (progn
-        (tick)
-        (and (defined render) (render))
-        (and (defined mrender) (mrender))
-        ))
-  (request-animation-frame #'main-loop))
+      (try (progn
+             (tick!)
+             (and (defined render) (render))
+             (and (defined mrender) (mrender))
+             )
+           (:finally (request-animation-frame #'main-loop)))))
 
 (main-loop)

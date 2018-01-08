@@ -1,0 +1,16 @@
+@keyframes move {
+  from {
+    offset-distance: 0%;
+    offset-rotate: 0deg;
+  }
+
+  to {
+    offset-distance: 100%;
+    offset-rotate: 0deg;
+  }
+}
+
+.zombie {
+  offset: path("m 0 0 v -2 z");
+  animation: move 1.0s cubic-bezier(0.2,.8,.8,0.2) infinite;
+}

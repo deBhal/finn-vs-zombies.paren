@@ -1,0 +1,53 @@
+(setf mcontainer ((@ document "getElementById") "mroot"))
+(setf mapcar (@ *R* map))
+
+(defun px (n)
+  (+ n "px"))
+
+(defun shot (props)
+  (with-slots (x y) props
+    (m :img (create :src "./assets/pea.png"
+                    :style (create :position "absolute"
+                                   :float :left
+                                   :left (px x)
+                                   :top (px y))))))
+
+(defun mzombie (props)
+  (m :img (create :key (@ props :index)
+                  :class "zombie"
+                  :src "./assets/zombie.png"
+                  :style (create :left (px (@ props x))
+                                 :top (px  (@ props y))
+                                 :position "absolute"
+                                 ;:margin-left (px -100)
+                                 ))))
+
+(defun peashooter (props)
+  (m :img (create :key :pea
+                  :src "./assets/pea-shooter-pixelated.png"
+                  :style (create :position :absolute
+                                 :top "25%"))))
+
+(setf obj-values (@ *R* values))
+(setf map-obj-indexed (@ *R* map-obj-indexed))
+(defun mapp ()
+  (m "div" (create :id "mapp"  :position "relative")
+     (m "div" (create :class-name "row"
+                      :onclick (@ *state* callbacks :create-zombie)
+                      :style (create :position "relative"
+                                     :height "140px"
+                                     :background-color "#afa"))
+        (peashooter)
+        (mapcar mzombie (obj-values (@ *state* zombies)))
+        (shot a-shot))
+     (m "pre" (create :style (create :position "relative"))
+        (chain *JSON* (stringify (create :state *state*
+                                         :a-shot a-shot)
+                                 nil
+                                 2)))
+     )
+  )
+
+(defun mrender ()
+  (chain m (render mcontainer (mapp)))
+  )

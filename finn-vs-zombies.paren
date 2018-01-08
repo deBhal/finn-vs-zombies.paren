@@ -15,7 +15,6 @@
  (progn
    ;; Setup skewer
    (slime-eval '(ql:quickload :parenscript))
-   (slime-eval '(ql:quickload :cl-react))
 
    ;; (slime-eval 'cl:*package*)
    ;; The # character in the printed package name fouls up something in the
@@ -24,8 +23,7 @@
    ;; use the common lisp package.
    (slime-eval '(cl:and
                  (cl:defpackage :fvz
-                   (:use :common-lisp :parenscript)
-                   (:import-from :cl-react :psx))
+                   (:use :common-lisp :parenscript))
                  "Created Package fvz"))
 
    (slime-eval '(cl:progn
@@ -36,12 +34,6 @@
                  "Created Package fvz"
                  ))
    (slime-repl-set-package :fvz)
-
-   ;; We also need to (cl-react:build) and send the results to the browser
-   ;; We might precompile and serve this statically
-   ;; You can confirm this worked by checking the browser for
-   ;; cl_react_createClass, cl_react_createElement, etc
-   (skewer-eval (slime-eval '(cl-react:build)) #'skewer-post-minibuffer)
    )
  ;; ^^ (C-c m e) Seems to work as one call, but I'm pleasantly surprised
  )
