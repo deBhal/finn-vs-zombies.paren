@@ -54,15 +54,22 @@
                           :left (px x)
                           :top (px y)
                           )))))
-
-(defun zombie (b-zombie)
-  (let ((x (@ a-zombie x)))
-    (cl-react:psx (:img :key :zombie
-                        :position "relative"
-                        :src "./assets/zombie.png"
-                        :style (create :left (px x)
-                                       :position "relative"
-                                       :margin-left (px -100))))))
+;;; So the props are coming in as children
+;;; that actually makes sense, ish.
+(defun zombie (props)
+  ;;(clog "zombie" props)
+  ;;debugger
+  (let ((x (@ props children x))
+        (my-props ((@ *JSON* stringify) props)))
+    (cl-react:psx
+     (:div
+      (:img :key :zombie
+            :position "relative"
+            :src "./assets/zombie.png"
+            :style (create :left (px x)
+                           :position "relative"
+                           :margin-left (px -100)))
+      (:span my-props)))))
 
 (defun render ()
   (chain react-dom (render (app *state*)
