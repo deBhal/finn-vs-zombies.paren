@@ -32,7 +32,7 @@ function mapp() {
     return m('div', { 'id' : 'mapp', 'position' : 'relative' }, m('div', { 'class-name' : 'row',
                                                                            'onclick' : STATE.callbacks['create-zombie'],
                                                                            'style' : { 'position' : 'relative',
-                                                                                       'height' : '120px',
+                                                                                       'height' : '140px',
                                                                                        'background-color' : '#afa'
                                                                                      }
                                                                          }, peashooter(), mapcar(mzombie, objValues(STATE.zombies)), shot(aShot)), m('pre', { 'style' : { 'position' : 'relative' } }, JSON.stringify({ 'state' : STATE, 'a-shot' : aShot }, null, 2)));

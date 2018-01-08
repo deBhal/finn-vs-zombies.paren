@@ -11,6 +11,6 @@
 }
 
 .zombie {
-  offset: path("m 0 0 v -2 z");
+  offset: path("m 0 70 v -2 z");
   animation: move 1.0s cubic-bezier(0.2,.8,.8,0.2) infinite;
 }
