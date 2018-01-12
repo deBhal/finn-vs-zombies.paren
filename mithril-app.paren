@@ -58,7 +58,7 @@
      (m "button" (create :onclick (@ window init-state!)) "Reset")
      (m "pre" (create :style (create :position "relative"))
         (chain *JSON* (stringify (create :state *state*
-                                         :a-shot a-shot)
+                                         )
                                  nil
                                  2)))
      )
