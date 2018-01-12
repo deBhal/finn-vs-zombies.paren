@@ -4,13 +4,19 @@
 (defun px (n)
   (+ n "px"))
 
+(defun dump (key value)
+  (setf (getprop *state* key) value)
+  (setf (getprop window key) value)
+  )
+
 (defun shot (props)
-  (with-slots (x y) props
+  (with-slots (x y-jiggle) props
     (m :img (create :src "./assets/pea.png"
+                    :class "shot"
                     :style (create :position "absolute"
                                    :float :left
                                    :left (px x)
-                                   :top (px y))))))
+                                   :margin-top (px y-jiggle))))))
 
 (defun mzombie (props)
   (m :img (create :key (@ props :index)
@@ -18,6 +24,7 @@
                   :src "./assets/zombie.png"
                   :style (create :left (px (@ props x))
                                  :top (px  (@ props y))
+                                 :top-margin (px (@ props y-offset))
                                  :position "absolute"
                                  ;:margin-left (px -100)
                                  ))))
@@ -25,6 +32,10 @@
 (defun peashooter (props)
   (m :img (create :key :pea
                   :src "./assets/pea-shooter-pixelated.png"
+                  :onclick (lambda (event)
+                             ((@ window spawn-shot!))
+                             ((@ event "stopPropagation"))
+                             )
                   :style (create :position :absolute
                                  :top "25%"))))
 
@@ -39,7 +50,12 @@
                                      :background-color "#afa"))
         (peashooter)
         (mapcar mzombie (obj-values (@ *state* zombies)))
-        (shot a-shot))
+        (mapcar shot (shots))
+        )
+     (m "button" (create :onclick #'play-pause) (if (@ *state* running) "Pause" "Play"))
+     (and (not (@ *state* running)) (m "button" (create :onclick #'step) "step"))
+     (m "button" (create :onclick (@ window create-zombie!)) "Spawn Zombie")
+     (m "button" (create :onclick (@ window init-state!)) "Reset")
      (m "pre" (create :style (create :position "relative"))
         (chain *JSON* (stringify (create :state *state*
                                          :a-shot a-shot)
