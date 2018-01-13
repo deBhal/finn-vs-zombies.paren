@@ -29,7 +29,7 @@
                                  ;:margin-left (px -100)
                                  ))))
 
-(defun peashooter (props)
+(defun peashooter (&optional (props (create :x 250)))
   (m :img (create :key :pea
                   :src "./assets/pea-shooter-pixelated.png"
                   :onclick (lambda (event)
@@ -37,6 +37,7 @@
                              ((@ event "stopPropagation"))
                              )
                   :style (create :position :absolute
+                                 :left (px (@ props x))
                                  :top "25%"))))
 
 (setf obj-values (@ *R* values))
@@ -48,13 +49,14 @@
                       :style (create :position "relative"
                                      :height "140px"
                                      :background-color "#afa"))
-        (peashooter)
+        (mapcar peashooter (obj-values (@ *state* plants)))
         (mapcar mzombie (obj-values (@ *state* zombies)))
         (mapcar shot (shots))
         )
      (m "button" (create :onclick #'play-pause) (if (@ *state* running) "Pause" "Play"))
      (and (not (@ *state* running)) (m "button" (create :onclick #'step) "step"))
      (m "button" (create :onclick (@ window create-zombie!)) "Spawn Zombie")
+     (m "button" (create :onclick (@ window spawn-plant!)) "Spawn Plant")
      (m "button" (create :onclick (@ window init-state!)) "Reset")
      (m "pre" (create :style (create :position "relative"))
         (chain *JSON* (stringify (create :state *state*

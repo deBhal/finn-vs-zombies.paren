@@ -1,7 +1,25 @@
 ((ps:getprop console 'log) "state.paren: Trident is working as expected")
 
 ;; external dependencies
-(setf mapcar (@ *R* map))
+(import (assoc-path
+         drop-last
+         head
+         is-empty
+         last
+         (map as mapcar)
+         merge
+         merge-all
+         tail
+         take
+         )
+        from *R*)
+
+(setf min-by (@ *R* min-by))
+(setf prop (@ *R* prop))
+(setf reduce (@ *R* reduce))
+(setf obj-values (@ *R* values))
+(import (min-by empty reduce) from *R*)
+
 
 (defun generate-new-zombie-index ()
   (setf (@ *state* zombie-index) (+ 1 (@ *state* zombie-index))))
@@ -10,11 +28,12 @@
   (create :title "Finn vs Zombies"
           :running true
           "time" 0
-          "zombieIndex" 0
+          "zombieIndex" 1 ; Start at 1 so we can (ab)use falsey 0
           "zombies" (create)
+          :plants (create)
           "shots" (create)))
 
-(defvar *shot-speed* 10)
+(defvar *shot-speed* 2)
 
 ;;; Zombie
 (defun randomIntBelow (n)
@@ -33,18 +52,22 @@
     (setf (getprop *state* :zombies index) zombie)
     zombie))
 
-(defun spawn-shot! (&optional (plant-id 0))
+(defun spawn-shot! (&optional (plant (create :x 120 :index 0)))
   (let* ((index (generate-new-zombie-index))
-         (x 120))
+         (plant-x (or (and plant (@ plant x)) 120))
+         (x (+ plant-x 60)))
     (setf (getprop *state* :shots index)
           (create x x
                   y-jiggle (plusOrMinus 5)
-                  shooter-id plant-id
+                  shooter-id index
                   index index))))
 
-(defun init-zombie ()
-  ;(setf a-zombie (create-zombie))
-  )
+(defun spawn-plant! (&key (x 120))
+  (let* ((index (generate-new-zombie-index)))
+    (setf (getprop *state* :plants index)
+          (merge default-plant (create x x
+                                       index index
+                                       )))))
 
 (defun init-zombies ()
   (mapcar create-zombie! (list ;0 90 300 600
@@ -69,20 +92,60 @@
 
 ;;; shot
 
-(defun create-shot (plant)
-  (let ((x 70)
-        (y 55))
-    (create :x x :y y))
-  )
 
+
+(setf default-plant (create x 0
+                            index 0
+                            ;; time-of-last-shot (@ +Number *NEGATIVE_INFINITY*)
+
+                            ))
+
+
+(defun constant (key)
+  (getprop *STATE* :constants key))
+
+(update! :constants 'plant-shot-cooldown 500)
+
+(defun update! (&rest path-and-value)
+  "Change the state"
+  (let* ((value (last path-and-value))
+         (path (drop-last 1 path-and-value)))
+    (setf *STATE* (assoc-path path value *STATE*))
+    *STATE*))
+(update! :title "Foobar")
+(setf path-and-value '(title "Foo"))
+(setf value (last path-and-value))
+(setf path (drop-last 1 path-and-value))
+
+(defun shot-is-cool (plant)
+  (with-slots (time-of-last-shot) (merge default-plant plant)
+    (let* ((current-time (@ *state* time))
+           (time-since-last-shot (- current-time time-of-last-shot)))
+      (or (not time-of-last-shot)
+          (<= (constant 'plant-shot-cooldown) time-since-last-shot)))))
+
+
+(defun update-plant (plant)
+  (with-slots (x index time-of-last-shot) (merge default-plant plant)
+    (let* ((current-time (@ *state* time))
+           (time-since-last-shot (- current-time time-of-last-shot))
+           (should-shoot (and (shot-is-cool plant)
+                              (not (is-empty (@ *STATE* zombies))))
+
+             ))
+      (merge-all (list plant
+                      (create should-shoot should-shoot
+                              time-since-last-shot time-since-last-shot
+                              current-time current-time)
+                      (and should-shoot
+                           (progn
+                             (spawn-shot! plant)
+                             (create time-of-last-shot current-time)))))
+      )))
 
 (defun update-shot (a-shot)
   (setf (@ a-shot x) (+ *shot-speed* (@ a-shot x)))
   a-shot)
-
-
-(defun reset-shot ()
-  (setf a-shot (create-shot)))
 
 (defun update-zombie-hit-by-shot ()
   (setf (@ a-zombie health) (- (@ a-zombie health) 1))
@@ -102,7 +165,7 @@
 
 (defun update-zombie (zombie)
   ;; Sorry mutation
-  (setf (@ zombie x) (- (@ zombie x) 1))
+  (setf (@ zombie x) (- (@ zombie x) 0.1))
   zombie
   )
 
@@ -118,22 +181,19 @@
 
 (init-state!)
 
-(setf min-by (@ *R* min-by))
-(setf prop (@ *R* prop))
-(setf reduce (@ *R* reduce))
-(setf obj-values (@ *R* values))
 
 (defun left-most (zombies)
-  (reduce (min-by (prop :x)) (create :x +infinity) (obj-values zombies)))
+  (let* ((zombies (obj-values zombies)))
+    (reduce (min-by (prop :x)) (head zombies) (tail zombies))))
 
 (defun calculate-collisions ()
   (let ((front-zombie (left-most (@ *state* zombies))))
-    (and front-zombie
-         (progn
-           (setf (@ *state* front-zombie) front-zombie)
-           (loop for a-shot in (shots)
-              when (<= (@ front-zombie x) (@ a-shot x))
-              collect (create :shot a-shot :zombie front-zombie))))))
+    (if front-zombie (progn
+                       (setf (@ *state* front-zombie) front-zombie)
+                       (loop for a-shot in (shots)
+                          when (<= (@ front-zombie x) (@ a-shot x))
+                          collect (create :shot a-shot :zombie front-zombie)))
+        (list))))
 
 (defun process-collision! (collision)
   (with-slots (shot zombie) collision
@@ -161,6 +221,7 @@
   (update-zombies)
 
   (setf (@ *state* :shots) ((@ *R* map) #'update-shot (@ *state* :shots)))
+  (setf (@ *state* :plants) ((@ *R* map) #'update-plant (@ *state* :plants)))
 
   (setf (@ *state* :collisions) (calculate-collisions))
   (process-collisions!)
