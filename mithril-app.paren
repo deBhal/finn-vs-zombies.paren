@@ -33,7 +33,7 @@
   (m :img (create :key :pea
                   :src "./assets/pea-shooter-pixelated.png"
                   :onclick (lambda (event)
-                             ((@ window spawn-shot!))
+                             ((@ window (plant-food! props)))
                              ((@ event "stopPropagation"))
                              )
                   :style (create :position :absolute

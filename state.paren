@@ -33,7 +33,6 @@
           :plants (create)
           "shots" (create)))
 
-(defvar *shot-speed* 2)
 
 ;;; Zombie
 (defun randomIntBelow (n)
@@ -68,6 +67,14 @@
           (merge default-plant (create x x
                                        index index
                                        )))))
+(defun time () (@ *STATE* time))
+
+(defun plant-food! (plant)
+  (dump "plant-food-plant" plant)
+  (update! :plants (@ plant index)
+           (merge plant (create plant-fooded-at (time))))
+                                        ;(update )
+  )
 
 (defun init-zombies ()
   (mapcar create-zombie! (list ;0 90 300 600
@@ -104,7 +111,13 @@
 (defun constant (key)
   (getprop *STATE* :constants key))
 
-(update! :constants 'plant-shot-cooldown 500)
+(update! :constants
+         (create 'plant-shot-cooldown 500
+                 'plant-fooded-shot-cooldown 5
+                 'plant-fooded-shot-count 50
+                 shot-speed 1))
+
+
 
 (defun update! (&rest path-and-value)
   "Change the state"
@@ -120,28 +133,40 @@
 (defun shot-is-cool (plant)
   (with-slots (time-of-last-shot) (merge default-plant plant)
     (let* ((current-time (@ *state* time))
-           (time-since-last-shot (- current-time time-of-last-shot)))
+           (time-since-last-shot (- current-time time-of-last-shot))
+           (cooldown (if (plant-food-activep plant)
+                         (constant 'plant-fooded-shot-cooldown)
+                         (constant 'plant-shot-cooldown))))
       (or (not time-of-last-shot)
-          (<= (constant 'plant-shot-cooldown) time-since-last-shot)))))
+          (<= cooldown time-since-last-shot)))))
 
+
+(defun plant-food-activep (plant)
+  (with-slots (plant-fooded-at) plant
+    (dump "plant-fooded-at" plant-fooded-at)
+    (and plant-fooded-at
+         (<= (time) (+ plant-fooded-at (* (constant 'plant-fooded-shot-count)
+                                          (constant 'plant-fooded-shot-cooldown))
+                       )))))
 
 (defun update-plant (plant)
-  (with-slots (x index time-of-last-shot) (merge default-plant plant)
+  (with-slots (x index time-of-last-shot plant-fooded-at) (merge default-plant plant)
     (let* ((current-time (@ *state* time))
            (time-since-last-shot (- current-time time-of-last-shot))
            (should-shoot (and (shot-is-cool plant)
-                              (not (is-empty (@ *STATE* zombies))))
-
-             ))
+                              (or (not (is-empty (@ *STATE* zombies)))
+                                  (plant-food-activep plant))))
+           (plant-food-active (plant-food-activep plant)))
       (merge-all (list plant
                       (create should-shoot should-shoot
                               time-since-last-shot time-since-last-shot
-                              current-time current-time)
+                              current-time current-time
+                              plant-food-active plant-food-active)
                       (and should-shoot
                            (progn
                              (spawn-shot! plant)
-                             (create time-of-last-shot current-time)))))
-      )))
+                             (create time-of-last-shot current-time
+                                     ))))))))
 
 (defun update-shot (a-shot)
   (setf (@ a-shot x) (+ *shot-speed* (@ a-shot x)))
