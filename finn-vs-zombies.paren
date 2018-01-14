@@ -1,5 +1,5 @@
 (quote
- ;; Setup skewer
+ ;; Setup skewer, trident, httpd & emacs
  (progn
    (setq httpd-port 8081)  ; I'm already using the default port 8080
    (httpd-serve-directory (format "%s" default-directory))
@@ -13,37 +13,18 @@
 
 (quote
  (progn
-   ;; Setup skewer
-   (slime-eval '(ql:quickload :parenscript))
-
-   ;; (slime-eval 'cl:*package*)
-   ;; The # character in the printed package name fouls up something in the
-   ;; connection, so we need to suppress that response.
-   ;; So slime-eval runs in the swank-io package, which would appear not to
-   ;; use the common lisp package.
-   (slime-eval '(cl:and
-                 (cl:defpackage :fvz
-                   (:use :common-lisp :parenscript))
-                 "Created Package fvz"))
-
-   (slime-eval '(cl:progn
-                 (cl:defpackage :fvz
-                   (:use :common-lisp :parenscript))
-                 (cl:in-package :fvz)
-                 (cl:use-package :parenscript)
-                 "Created Package fvz"
-                 ))
+   (slime-load-file "finn-vs-zombies.lisp")
    (slime-repl-set-package :fvz)
    )
- ;; ^^ (C-c m e) Seems to work as one call, but I'm pleasantly surprised
+ ;; ^^ (C-c m e)
  )
+
+;;; Global setup
 
 ; ((ps:getprop console 'log) "Trident is working as expected")
 (defun clog (&rest args)
   (apply (@ console log) args))
 
 (clog "Trident is working as expected")
-
-;;; Global setup
 
 ;; OK: now load mithril-app.paren and then state.paren
