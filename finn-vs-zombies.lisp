@@ -27,7 +27,3 @@
                                         `(setf ,my-sym (@ ,library ,lib-sym))))))
 
 
-(ps:defpsmacro temp (key &optional duration)
-  "Create a property intended to be temporary by also noting the current time and, optionally, a duration"
-  `(create ,key (merge (create :at (time))
-                     (and ,duration (create :for ,duration)))))

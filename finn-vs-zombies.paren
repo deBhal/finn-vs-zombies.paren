@@ -19,7 +19,7 @@
  ;; ^^ (C-c m e)
  )
 
-;;; Global setup
+;;; Global setup / util
 
 ; ((ps:getprop console 'log) "Trident is working as expected")
 (defun clog (&rest args)

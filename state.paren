@@ -2,28 +2,31 @@
 
 ;; external dependencies
 (import (assoc-path
+         clone
          drop-last
+         filter
          head
          is-empty
+         keys
          last
          (map as mapcar)
-         merge
          merge-all
+         min-by
+         path
+         prop
+         reduce
+         reject
          tail
          take
+         (values as obj-values)
          )
         from *R*)
 
-(setf min-by (@ *R* min-by))
-(setf prop (@ *R* prop))
-(setf reduce (@ *R* reduce))
-(setf obj-values (@ *R* values))
-(import (min-by empty reduce) from *R*)
+;;; Silently ignoring all but 2 arguments is pretty jarring in a lispy context
+(defun merge (&rest args)
+  (reduce (@ *R* merge) {} args))
 
-
-(defun generate-new-zombie-index ()
-  (setf (@ *state* zombie-index) (+ 1 (@ *state* zombie-index))))
-
+;;; General Utils
 (defvar initial-state
   (create :title "Finn vs Zombies"
           :running true
@@ -33,6 +36,41 @@
           :plants (create)
           "shots" (create)))
 
+(defun get (&rest prop-path)
+  ((path prop-path) *state*))
+
+(defun generate-new-mob-index ()
+  (setf (@ *state* zombie-index) (+ 1 (@ *state* zombie-index))))
+
+(defun update! (&rest path-and-value)
+  "Change the state"
+  (let* ((value (last path-and-value))
+         (path (drop-last 1 path-and-value)))
+    (setf *STATE* (assoc-path path value *STATE*))
+    *STATE*))
+
+(defun constant (key)
+  (getprop *STATE* :constants key))
+
+(defun temp-prop (key  &optional duration)
+  (let ((result (create)))
+    (setf (getprop result key)
+          (merge (create :at (time))
+                 (create :duration (if (defined duration)
+                                       duration
+                                       (default-duration key)))))
+    result))
+
+(defun is-expired-temp-prop (obj)
+  (and obj
+       (with-slots (at duration) obj
+         (<= (+ at duration) (time)))))
+
+(defun filter-out-expired-temp-props (obj)
+  (reject #'is-expired-temp-prop obj))
+
+(defun default-duration (key)
+  (or (get 'default-durations key) (get 'default-durations 'default)))
 
 ;;; Zombie
 (defun randomIntBelow (n)
@@ -43,7 +81,7 @@
 
 (defun create-zombie! (&optional (x 1200))
   (let* ((x (if ((@ +Number is-finite) x) x 1200))
-         (index (generate-new-zombie-index))
+         (index (generate-new-mob-index))
          (zombie (create :x x
           :y (plusOrMinus 5)
           :health 10
@@ -52,8 +90,8 @@
     zombie))
 
 (defun spawn-shot! (&optional (plant (create :x 120 :index 0)))
-  (let* ((index (generate-new-zombie-index))
-         (plant-x (or (and plant (@ plant x)) 120))
+  (let* ((index (generate-new-mob-index))
+         (plant-x (or (and plant (@ plant x)) 0))
          (x (+ plant-x 60)))
     (setf (getprop *state* :shots index)
           (create x x
@@ -61,25 +99,22 @@
                   shooter-id index
                   index index))))
 
-(defun spawn-plant! (&key (x 120))
-  (let* ((index (generate-new-zombie-index)))
+(defun spawn-plant! (&key x)
+  (let* ((x (or x (* 70 (chain (keys (get :plants)) length))))
+         (index (generate-new-mob-index)))
     (setf (getprop *state* :plants index)
           (merge default-plant (create x x
-                                       index index
-                                       )))))
+                                       index index)))))
 (defun time () (@ *STATE* time))
 
 (defun plant-food! (plant)
-  (dump "plant-food-plant" plant)
   (update! :plants (@ plant index)
-           (merge plant (create plant-fooded-at (time))))
-                                        ;(update )
-  )
+           (merge plant
+                  (temp-prop 'plant-fooded))))
 
 (defun init-zombies ()
   (mapcar create-zombie! (list ;0 90 300 600
                                900)))
-
 
 (defun alivep (zombie)
   (not (or
@@ -97,10 +132,6 @@
 (defun reset-zombie (zombie)
   ((@ +object assign) zombie (create :x 1200 :health 10)))
 
-;;; shot
-
-
-
 (setf default-plant (create x 0
                             index 0
                             ;; time-of-last-shot (@ +Number *NEGATIVE_INFINITY*)
@@ -108,83 +139,66 @@
                             ))
 
 
-(defun constant (key)
-  (getprop *STATE* :constants key))
 
-(update! :constants
-         (create 'plant-shot-cooldown 500
-                 'plant-fooded-shot-cooldown 5
-                 'plant-fooded-shot-count 50
-                 shot-speed 1))
-
-
-
-(defun update! (&rest path-and-value)
-  "Change the state"
-  (let* ((value (last path-and-value))
-         (path (drop-last 1 path-and-value)))
-    (setf *STATE* (assoc-path path value *STATE*))
-    *STATE*))
-(update! :title "Foobar")
-(setf path-and-value '(title "Foo"))
-(setf value (last path-and-value))
-(setf path (drop-last 1 path-and-value))
+(defun plant-fooded-shot-cooldown ()
+  (/ (default-duration 'plant-fooded) (constant 'plant-fooded-shot-count)))
 
 (defun shot-is-cool (plant)
   (with-slots (time-of-last-shot) (merge default-plant plant)
     (let* ((current-time (@ *state* time))
            (time-since-last-shot (- current-time time-of-last-shot))
            (cooldown (if (plant-food-activep plant)
-                         (constant 'plant-fooded-shot-cooldown)
+                         (plant-fooded-shot-cooldown)
                          (constant 'plant-shot-cooldown))))
       (or (not time-of-last-shot)
           (<= cooldown time-since-last-shot)))))
 
-
 (defun plant-food-activep (plant)
-  (with-slots (plant-fooded-at) plant
-    (dump "plant-fooded-at" plant-fooded-at)
-    (and plant-fooded-at
-         (<= (time) (+ plant-fooded-at (* (constant 'plant-fooded-shot-count)
-                                          (constant 'plant-fooded-shot-cooldown))
-                       )))))
+  (getprop plant 'plant-fooded))
 
 (defun update-plant (plant)
-  (with-slots (x index time-of-last-shot plant-fooded-at) (merge default-plant plant)
-    (let* ((current-time (@ *state* time))
-           (time-since-last-shot (- current-time time-of-last-shot))
-           (should-shoot (and (shot-is-cool plant)
-                              (or (not (is-empty (@ *STATE* zombies)))
-                                  (plant-food-activep plant))))
-           (plant-food-active (plant-food-activep plant)))
-      (merge-all (list plant
-                      (create should-shoot should-shoot
-                              time-since-last-shot time-since-last-shot
-                              current-time current-time
-                              plant-food-active plant-food-active)
-                      (and should-shoot
-                           (progn
-                             (spawn-shot! plant)
-                             (create time-of-last-shot current-time
-                                     ))))))))
+  (let ((plant (filter-out-expired-temp-props plant)))
+    (with-slots (x index time-of-last-shot plant-fooded) (merge default-plant plant)
+      (let* ((current-time (@ *state* time))
+             (time-since-last-shot (- current-time time-of-last-shot))
+             (has-target (not (is-empty (@ *STATE* zombies))))
+             (wants-to-shoot (or has-target
+                                 plant-fooded))
+             (should-shoot (and wants-to-shoot
+                                (shot-is-cool plant))))
+        (merge-all (list (filter-out-expired-temp-props plant)
+                         (create derived (create should-shoot should-shoot
+                                                 time-since-last-shot time-since-last-shot
+                                                 current-time current-time
+                                                 wants-to-shoot wants-to-shoot
+                                                 has-target has-target
+                                                 ))
+                         (and should-shoot
+                              (progn
+                                (spawn-shot! plant)
+                                (create time-of-last-shot current-time)))))))))
 
 (defun update-shot (a-shot)
-  (setf (@ a-shot x) (+ *shot-speed* (@ a-shot x)))
+  (setf (@ a-shot x) (+ (constant 'shot-speed) (@ a-shot x)))
   a-shot)
 
 (defun update-zombie-hit-by-shot ()
   (setf (@ a-zombie health) (- (@ a-zombie health) 1))
   )
 
-;; I only need this because I'm a naughty mutator :'(
-(setf clone (@ *R* clone))
 ;;; State
 (defun init-state! ()
+  ;; I only need this clone because I'm a naughty mutator :p
   (setf *state* (clone initial-state))
-
-  (init-zombie)
   (init-zombies)
   (setf (@ *state* callbacks) (create :create-zombie (lambda () (create-zombie!))))
+  (update! :constants
+           (create 'plant-shot-cooldown 150
+                   'plant-fooded-shot-count 50
+                   shot-speed 4))
+  (update! 'default-durations
+           (create default 200
+                   plant-fooded 100))
   *state*
   )
 
@@ -198,14 +212,14 @@
   (setf (@ *state* zombies) (mapcar update-zombie (@ *state* zombies)))
   )
 
-(defun play-pause ()
-  (setf (@ *state* running) (not (@ *state* running)))
+(defun pause ()
+  (setf (@ *state* running) false)
   ;; Heh. We need an extra render here to render a pause-specific "step" button
-  (mrender)
-  )
+  (mrender))
 
-(init-state!)
-
+(defun play-pause ()
+  (if (@ *state* running) (pause)
+      (setf (@ *state* running) true)))
 
 (defun left-most (zombies)
   (let* ((zombies (obj-values zombies)))
@@ -236,40 +250,19 @@
 (defun shots ()
  (obj-values (@ *state* shots)))
 
-(setf #'filter (@ *R* filter))
 (setf #'fitler-dead (filter ((@ *R* negate) (prop :dead))))
-(setf #'prop (@ *R* prop))
 
 (defun tick! ()
   "update all the things"
   (setf (@ *state* time) (+ 1 (@ *state* time)))
   (update-zombies)
 
-  (setf (@ *state* :shots) ((@ *R* map) #'update-shot (@ *state* :shots)))
-  (setf (@ *state* :plants) ((@ *R* map) #'update-plant (@ *state* :plants)))
+  (setf (@ *state* :shots) (mapcar #'update-shot (@ *state* :shots)))
+  (setf (@ *state* :plants) (mapcar #'update-plant (@ *state* :plants)))
 
   (setf (@ *state* :collisions) (calculate-collisions))
   (process-collisions!)
 
   (setf (@ *state* :shots) (filter alivep (@ *state* :shots)))
   (setf (@ *state* :zombies) (filter alivep (@ *state* :zombies)))
-
   )
-
-(tick!)
-
-; UI Glue, depends on react-app.paren
-(defun main-loop ()
-  (try
-   (and (@ *state* running)
-        (progn
-          (tick!)
-          (and (defined render) (render))
-          (and (defined mrender) (mrender))))
-   (:finally (request-animation-frame #'main-loop))))
-
-(main-loop)
-
-(defun step ()
-  (tick!)
-  (mrender))

@@ -33,7 +33,7 @@
   (m :img (create :key :pea
                   :src "./assets/pea-shooter-pixelated.png"
                   :onclick (lambda (event)
-                             ((@ window (plant-food! props)))
+                             (plant-food! props)
                              ((@ event "stopPropagation"))
                              )
                   :style (create :position :absolute
@@ -45,7 +45,7 @@
 (defun mapp ()
   (m "div" (create :id "mapp"  :position "relative")
      (m "div" (create :class-name "row"
-                      :onclick (@ *state* callbacks :create-zombie)
+                      :onclick #'create-zombie!
                       :style (create :position "relative"
                                      :height "140px"
                                      :background-color "#afa"))
@@ -69,3 +69,21 @@
 (defun mrender ()
   (chain m (render mcontainer (mapp)))
   )
+
+;;;  GO!
+(init-state!)
+(tick!)
+
+; UI Glue, depends on react-app.paren
+(defun main-loop ()
+        (progn
+          (try
+           (and (@ *state* running)
+                (step))
+           (:finally (request-animation-frame #'main-loop)))))
+
+(main-loop)
+
+(defun step ()
+  (tick!)
+  (mrender))
