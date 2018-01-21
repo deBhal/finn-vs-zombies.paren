@@ -134,11 +134,7 @@
 
 (setf default-plant (create x 0
                             index 0
-                            ;; time-of-last-shot (@ +Number *NEGATIVE_INFINITY*)
-
                             ))
-
-
 
 (defun plant-fooded-shot-cooldown ()
   (/ (default-duration 'plant-fooded) (constant 'plant-fooded-shot-count)))
