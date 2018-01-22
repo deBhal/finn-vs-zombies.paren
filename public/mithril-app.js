@@ -1,5 +1,7 @@
 mcontainer = document['getElementById']('mroot');
 mapcar = R.map;
+objValues = R.values;
+mapObjIndexed = R.mapObjIndexed;
 function px(n) {
     return n + 'px';
 };
@@ -17,16 +19,21 @@ function shot(props) {
                                 }
                     });
 };
+function cone(health) {
+    if (health === undefined) {
+        health = 21;
+    };
+    return m('img', 14 < health ? { 'class' : 'cone', 'src' : './assets/cone.png' } : (8 < health ? { 'class' : 'cone damaged', 'src' : './assets/cone-2.png' } : { 'class' : 'cone badly-damaged', 'src' : './assets/cone-3.png' }));
+};
 function mzombie(props) {
-    return m('img', { 'key' : props['index'],
+    return m('div', { 'key' : props['index'],
                       'class' : 'zombie',
-                      'src' : './assets/zombie.png',
                       'style' : { 'left' : px(props.x),
                                   'top' : px(props.y),
                                   'top-margin' : px(props.yOffset),
                                   'position' : 'absolute'
                                 }
-                    });
+                    }, m('img', { 'src' : './assets/zombie.png' }), props.cone && cone(props.cone.health));
 };
 function peashooter(props) {
     if (props === undefined) {
@@ -44,22 +51,18 @@ function peashooter(props) {
                                 }
                     });
 };
-objValues = R.values;
-mapObjIndexed = R.mapObjIndexed;
 function mapp() {
     return m('div', { 'id' : 'mapp', 'position' : 'relative' }, m('div', { 'class-name' : 'row',
-                                                                           'onclick' : createZombiebang,
+                                                                           'onclick' : spawnZombiebang,
                                                                            'style' : { 'position' : 'relative',
                                                                                        'height' : '140px',
                                                                                        'background-color' : '#afa'
                                                                                      }
-                                                                         }, mapcar(peashooter, objValues(STATE.plants)), mapcar(mzombie, objValues(STATE.zombies)), mapcar(shot, shots())), m('button', { 'onclick' : playPause }, STATE.running ? 'Pause' : 'Play'), !STATE.running && m('button', { 'onclick' : step }, 'step'), m('button', { 'onclick' : window.createZombiebang }, 'Spawn Zombie'), m('button', { 'onclick' : window.spawnPlantbang }, 'Spawn Plant'), m('button', { 'onclick' : window.initStatebang }, 'Reset'), m('pre', { 'style' : { 'position' : 'relative' } }, JSON.stringify({ 'state' : STATE }, null, 2)));
+                                                                         }, mapcar(peashooter, objValues(STATE.plants)), mapcar(mzombie, objValues(STATE.zombies)), mapcar(shot, shots())), m('button', { 'onclick' : playPause }, STATE.running ? 'Pause' : 'Play'), !STATE.running && m('button', { 'onclick' : step }, 'step'), m('button', { 'onclick' : window.spawnZombiebang }, 'Spawn Zombie'), m('button', { 'onclick' : window.spawnConeHeadbang }, 'Spawn Cone-Head'), m('button', { 'onclick' : window.spawnPlantbang }, 'Spawn Plant'), m('button', { 'onclick' : window.initStatebang }, 'Reset'), m('pre', { 'style' : { 'position' : 'relative' } }, JSON.stringify({ 'state' : STATE }, null, 2)));
 };
 function mrender() {
     return m.render(mcontainer, mapp());
 };
-initStatebang();
-tickbang();
 function mainLoop() {
     try {
         return STATE.running && step();
@@ -67,6 +70,7 @@ function mainLoop() {
         requestAnimationFrame(mainLoop);
     };
 };
+initStatebang();
 mainLoop();
 function step() {
     tickbang();
