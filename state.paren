@@ -140,13 +140,6 @@
   zombie
   )
 
-(defun reset-zombie (zombie)
-  ((@ +object assign) zombie (create :x 1200 :health 10)))
-
-(setf default-plant (create x 0
-                            index 0
-                            ))
-
 (defun plant-fooded-shot-cooldown ()
   (/ (default-duration 'plant-fooded) (constant 'plant-fooded-shot-count)))
 
