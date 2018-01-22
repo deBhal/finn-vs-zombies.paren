@@ -22,7 +22,9 @@
          )
         from *R*)
 
-;;; Silently ignoring all but 2 arguments is pretty jarring in a lispy context
+;;;
+
+;;; In a lispy context, let's not silently ignore all but 2 arguments
 (defun merge (&rest args)
   (reduce (@ *R* merge) {} args))
 
@@ -42,24 +44,26 @@
 (defun generate-new-mob-index ()
   (setf (@ *state* zombie-index) (+ 1 (@ *state* zombie-index))))
 
-(defun update! (&rest path-and-value)
-  "Change the state"
-  (let* ((value (last path-and-value))
-         (path (drop-last 1 path-and-value)))
+(defun update! (&rest path-then-value)
+  "Change the state. The first n arguments are the path to the data to be updated in the state, and the last argument is the new value to store there."
+  (let* ((value (last path-then-value))
+         (path (drop-last 1 path-then-value)))
     (setf *STATE* (assoc-path path value *STATE*))
     *STATE*))
 
 (defun constant (key)
   (getprop *STATE* :constants key))
 
-(defun temp-prop (key  &optional duration)
-  (let ((result (create)))
-    (setf (getprop result key)
-          (merge (create :at (time))
-                 (create :duration (if (defined duration)
-                                       duration
-                                       (default-duration key)))))
-    result))
+(defun temp-prop (key  &optional duration (target (create)))
+  "Returns or updates an object like {plantFooded: {at:2018, duration: 200}} suitable for merging into another object (or setting by key)
+
+  The idea is that code that only cares about the property can just check if it's truthy, but it wraps up enough data to clear out the prop later."
+  (setf (getprop target key)
+        (merge (create :at (time))
+               (create :duration (if (defined duration)
+                                     duration
+                                     (default-duration key)))))
+  target)
 
 (defun is-expired-temp-prop (obj)
   (and obj
@@ -79,7 +83,7 @@
 (defun plusOrMinus (n)
   (- n (randomIntBelow (+ 1 (* 2 n)))))
 
-(defun create-zombie! (&optional (x 1200))
+(defun spawn-zombie! (&optional (x 1200))
   (let* ((x (if ((@ +Number is-finite) x) x 1200))
          (index (generate-new-mob-index))
          (zombie (create :x x
@@ -88,6 +92,12 @@
           :index index)))
     (setf (getprop *state* :zombies index) zombie)
     zombie))
+
+(defun spawn-cone-head! (&optional (x 1200))
+  (let ((zombie (spawn-zombie! x)))
+    (with-slots (index) zombie
+      (update! 'zombies index (merge zombie
+                                     (create :cone (create :health 21)))))))
 
 (defun spawn-shot! (&optional (plant (create :x 120 :index 0)))
   (let* ((index (generate-new-mob-index))
@@ -113,16 +123,17 @@
                   (temp-prop 'plant-fooded))))
 
 (defun init-zombies ()
-  (mapcar create-zombie! (list ;0 90 300 600
+  (mapcar spawn-zombie! (list ;0 90 300 600
                                900)))
 
 (defun alivep (zombie)
-  (not (or
-        (<= (@ zombie health) 0)
-        ;; for now, kill anything that is out of bounds
-        (<= (@ zombie x) -100)
-        (<= 1300 (@ zombie x))
-        (@ zombie :dead))))
+  (not (or (and (defined (@ zombie health))
+                (<= (@ zombie health) 0))
+           ;; for now, kill anything that is out of bounds
+           (and (defined (@ zombie x))
+                (or (<= (@ zombie x) -100)
+                    (<= 1300 (@ zombie x))))
+           (@ zombie :dead))))
 
 (defun walk (zombie)
   (setf (@ zombie x) (- (@ zombie x) 1))
@@ -178,16 +189,12 @@
   (setf (@ a-shot x) (+ (constant 'shot-speed) (@ a-shot x)))
   a-shot)
 
-(defun update-zombie-hit-by-shot ()
-  (setf (@ a-zombie health) (- (@ a-zombie health) 1))
-  )
-
 ;;; State
 (defun init-state! ()
   ;; I only need this clone because I'm a naughty mutator :p
   (setf *state* (clone initial-state))
   (init-zombies)
-  (setf (@ *state* callbacks) (create :create-zombie (lambda () (create-zombie!))))
+  (setf (@ *state* callbacks) (create :spawn-zombie (lambda () (spawn-zombie!))))
   (update! :constants
            (create 'plant-shot-cooldown 150
                    'plant-fooded-shot-count 50
@@ -201,7 +208,8 @@
 (defun update-zombie (zombie)
   ;; Sorry mutation
   (setf (@ zombie x) (- (@ zombie x) 0.1))
-  zombie
+  ;; Strip armour, not checking the zombie itself
+  (filter alivep zombie)
   )
 
 (defun update-zombies ()
@@ -230,13 +238,24 @@
                           collect (create :shot a-shot :zombie front-zombie)))
         (list))))
 
+(defun find-armor (mob)
+  "Returns a path to the health that should be decremented e.g. a plant's health, or a zombie's bucket"
+  (cond ((@ mob cone) (list 'cone 'health))
+        ((@ mob bucket) (list 'bucket 'health))
+        (t (list 'health))))
+
+(defun hurt (mob &optional (damage 1))
+  "Subtract damage from the mobs health (or bucket)"
+  (let* ((health-path (find-armor mob))
+         (health (path health-path mob)))
+    (assoc-path health-path (- health damage) mob)))
+
 (defun process-collision! (collision)
   (with-slots (shot zombie) collision
     (let* ((zombie-id (@ zombie :index))
            (the-zombie (getprop *state* :zombies zombie-id))
-           (shot-id (@ shot :index))
-           (health (@ the-zombie :health)))
-      (setf (getprop *state* :zombies zombie-id :health) (- health 1))
+           (shot-id (@ shot :index)))
+      (setf (getprop *state* :zombies zombie-id) (hurt the-zombie))
       (setf (getprop *state* :shots shot-id :dead) t))))
 
 (defun process-collisions! ()

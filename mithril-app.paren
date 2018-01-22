@@ -1,5 +1,7 @@
 (setf mcontainer ((@ document "getElementById") "mroot"))
 (setf mapcar (@ *R* map))
+(setf obj-values (@ *R* values))
+(setf map-obj-indexed (@ *R* map-obj-indexed))
 
 (defun px (n)
   (+ n "px"))
@@ -18,16 +20,31 @@
                                    :left (px x)
                                    :margin-top (px y-jiggle))))))
 
+;; It takes 7 shots for the first stage of damage
+;; It takes 6 more shots for the second stage
+;; and 6 shots more to knock the cone right off
+;; For a total of 21 health on a cone
+;; Oddly, in pvz the resulting brown-coat has one less health than normal
+;; after it's arm falls off (5,4 shots instead of 5,5)
+;; but I'm not going to bother with that detail
+(defun cone (&optional (health 21))
+  (m :img (cond ((< 14 health) (create :class "cone"
+                                       :src "./assets/cone.png"))
+                ((< 8 health) (create :class "cone damaged"
+                                      :src "./assets/cone-2.png"))
+                (t            (create :class "cone badly-damaged"
+                                      :src "./assets/cone-3.png")))))
+
 (defun mzombie (props)
-  (m :img (create :key (@ props :index)
+  (m :div (create :key (@ props :index)
                   :class "zombie"
-                  :src "./assets/zombie.png"
                   :style (create :left (px (@ props x))
                                  :top (px  (@ props y))
                                  :top-margin (px (@ props y-offset))
-                                 :position "absolute"
-                                 ;:margin-left (px -100)
-                                 ))))
+                                 :position "absolute"))
+     (m :img (create
+              :src "./assets/zombie.png"))
+     (and (@ props cone) (cone (@ props cone health)))))
 
 (defun peashooter (&optional (props (create :x 250)))
   (m :img (create :key :pea
@@ -40,12 +57,10 @@
                                  :left (px (@ props x))
                                  :top "25%"))))
 
-(setf obj-values (@ *R* values))
-(setf map-obj-indexed (@ *R* map-obj-indexed))
 (defun mapp ()
   (m "div" (create :id "mapp"  :position "relative")
      (m "div" (create :class-name "row"
-                      :onclick #'create-zombie!
+                      :onclick #'spawn-zombie!
                       :style (create :position "relative"
                                      :height "140px"
                                      :background-color "#afa"))
@@ -55,7 +70,8 @@
         )
      (m "button" (create :onclick #'play-pause) (if (@ *state* running) "Pause" "Play"))
      (and (not (@ *state* running)) (m "button" (create :onclick #'step) "step"))
-     (m "button" (create :onclick (@ window create-zombie!)) "Spawn Zombie")
+     (m "button" (create :onclick (@ window spawn-zombie!)) "Spawn Zombie")
+     (m "button" (create :onclick (@ window spawn-cone-head!)) "Spawn Cone-Head")
      (m "button" (create :onclick (@ window spawn-plant!)) "Spawn Plant")
      (m "button" (create :onclick (@ window init-state!)) "Reset")
      (m "pre" (create :style (create :position "relative"))
@@ -70,18 +86,14 @@
   (chain m (render mcontainer (mapp)))
   )
 
-;;;  GO!
-(init-state!)
-(tick!)
-
 ; UI Glue, depends on react-app.paren
 (defun main-loop ()
-        (progn
-          (try
-           (and (@ *state* running)
-                (step))
-           (:finally (request-animation-frame #'main-loop)))))
+  (try
+   (and (@ *state* running) (step))
+   (:finally (request-animation-frame #'main-loop))))
 
+;;;  GO!
+(init-state!)
 (main-loop)
 
 (defun step ()

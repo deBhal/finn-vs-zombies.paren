@@ -18,3 +18,16 @@
 .shot {
     top: 46px;
 }
+
+.cone {
+    src: "./assets/cone.png";
+    left: 0;
+    top: -20px;
+    position: absolute;
+
+}
+
+.cone.damaged, .cone.badly-damaged {
+    left: 3px;
+    top: -14px;
+}
