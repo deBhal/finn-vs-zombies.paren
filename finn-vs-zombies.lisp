@@ -14,17 +14,25 @@
 (in-package :fvz)
 (use-package :parenscript)
 
+(defun looks-like-an-as-clause (list)
+  (and (= 3 (length list))
+       (eq (cadr list) 'as)))
+
+(defun looks-like-one-import (symbols)
+  (or (not (listp symbols))
+      (looks-like-an-as-clause symbols)))
+
 (ps:defpsmacro import (symbols from library)
-                 (declare (ignore from))
-                 `(progn ,@(loop for symbol in symbols
-                              collect (let ((lib-sym (if (consp symbol)
-                                                         (car symbol)
-                                                         symbol))
-                                            (my-sym (if (consp symbol)
-                                                        (or (caddr symbol)
-                                                            (cadr symbol))
-                                                        symbol)))
-                                        `(setf ,my-sym (@ ,library ,lib-sym))))))
+  (declare (ignore from))
+  `(progn ,@(loop for symbol in (if (looks-like-one-import symbols) (list symbols) symbols)
+               collect (let ((lib-sym (if (consp symbol)
+                                          (car symbol)
+                                          symbol))
+                             (my-sym (if (consp symbol)
+                                         (or (caddr symbol)
+                                             (cadr symbol))
+                                         symbol)))
+                         `(setf ,my-sym (@ ,library ,lib-sym))))))
 
 (ps:defpsmacro transformation (slots &body keys-and-values)
   "Returns a function :: Object -> Object that binds the given slots, evaluates the given key-value pairs in that context, and returns a copy of the object those key-value pairs merged in.
