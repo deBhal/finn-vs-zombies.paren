@@ -7,16 +7,21 @@
    (slime-mode)
    (trident-mode)
    (steal-slime-keys-for-trident!)
+   ;; duplicating this here to save on chord during setup
+   (slime-load-file "finn-vs-zombies.lisp")
    )
  ;; ^^ (C-c m e) Here for all that
  )
 
 (quote
  (progn
+   ;; Duplicating this here for convenience after slime-restart-inferior-lisp
    (slime-load-file "finn-vs-zombies.lisp")
+   ;;                                     ^^ (C-c m e)
    (slime-repl-set-package :fvz)
-   )
- ;; ^^ (C-c m e)
+   ;;                           ^^ (C-c m e)
+  )
+ ;; Seems like we need to run these separately :(
  )
 
 ;;; Global setup / util
