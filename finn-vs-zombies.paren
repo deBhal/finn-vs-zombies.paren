@@ -22,6 +22,7 @@
    ;;                           ^^ (C-c m e)
   )
  ;; Seems like we need to run these separately :(
+ ;; ... I wonder why
  )
 
 ;;; Global setup / util

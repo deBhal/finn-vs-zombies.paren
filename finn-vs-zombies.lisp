@@ -6,6 +6,8 @@
 ;; So slime-eval runs in the swank-io package, which would appear not to
 ;; use the common lisp package.
 
+;;; M-x slime-init-keymaps
+
 (defpackage :fvz
   (:use :common-lisp :parenscript))
 

@@ -1,7 +1,18 @@
 (setf mcontainer ((@ document "getElementById") "mroot"))
-(setf mapcar (@ *R* map))
-(setf obj-values (@ *R* values))
-(setf map-obj-indexed (@ *R* map-obj-indexed))
+(import (add-index
+         (map as mapcar)
+         map-obj-indexed
+         concat
+         join
+         (values as obj-values)
+         reduce
+         )
+        from -r)
+(setf map-indexed (add-index mapcar))
+(setf reduce-indexed (add-index reduce))
+
+;;; Notes: false gets normalized to ""
+;;; What about null?
 
 (defun px (n)
   (+ n "px"))
@@ -11,6 +22,7 @@
   (setf (getprop window key) value)
   )
 
+;;; When there are a ton of shots onscreen, the rendering looks like the bottleneck
 (defun shot (props)
   (with-slots (x y-jiggle) props
     (m :img (create :src "./assets/pea.png"
