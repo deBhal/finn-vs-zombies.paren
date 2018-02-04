@@ -1,42 +1,74 @@
-((ps:getprop console 'log) "state.paren: Trident is working as expected")
+((ps:getprop console 'log) "in state.paren")
 
 ;; external dependencies
-(import (assoc-path
+(import (assoc
+         assoc-path
          clone
+         complement
+         drop
          drop-last
          filter
+         find
+         find-index
          head
+         (head as car)
          is-empty
          keys
          last
          (map as mapcar)
          merge-all
          min-by
+         not
          path
+         pipe
          prop
+         range
          reduce
          reject
+         repeat
          tail
          take
+         times
          (values as obj-values)
+         zip-obj
          )
         from *R*)
-
-;;;
 
 ;;; In a lispy context, let's not silently ignore all but 2 arguments
 (defun merge (&rest args)
   (reduce (@ *R* merge) {} args))
+
+;;; Ramda has a kind of annoying inconsistency to it's treatment of arrays,
+;;; notably it will quietly assoc-path through one, but replace it with an
+;;  object in it's return value :/
+;; (in other places it might work fine or complain)
+(defun objectify-array (list)
+  (zip-obj (range 0 (@ list length)) list)
+  )
+
+(defun create-empty-row ()
+  (create :plants (objectify-array (repeat nil 9))
+          :zombies (create)
+          "shots" (create)))
 
 ;;; General Utils
 (defvar initial-state
   (create :title "Finn vs Zombies"
           :running true
           "time" 0
-          "zombieIndex" 1 ; Start at 1 so we can (ab)use falsey 0
-          "zombies" (create)
-          :plants (create)
-          "shots" (create)))
+          "zombieIndex" 10 ;; save the single-digit values for manually creating mobs
+          'zombie-generator (create)
+          :rows (objectify-array (times #'create-empty-row 6))
+          'constants (create 'plant-shot-cooldown 150
+                             'plant-fooded-shot-count 50
+                             shot-speed 4
+                             turf-width 100
+                             )))
+
+(setf default-plant (create x 0
+                            index 0
+                            types (list :plant :mob)))
+
 
 (defun get (&rest prop-path)
   ((path prop-path) *state*))
@@ -48,22 +80,25 @@
   "Change the state. The first n arguments are the path to the data to be updated in the state, and the last argument is the new value to store there."
   (let* ((value (last path-then-value))
          (path (drop-last 1 path-then-value)))
-    (setf *STATE* (assoc-path path value *STATE*))
-    *STATE*))
+    ;; Ugh. assoc-path converts arrays to objects :'(
+    ;; https://github.com/ramda/ramda/issues/1332
+    (setf *STATE* (assoc-path path value *STATE*))))
 
 (defun constant (key)
   (getprop *STATE* :constants key))
 
-(defun temp-prop (key  &optional duration (target (create)))
+(defun temp-prop (key &optional duration)
+  (clog "temp-prop" key)
   "Returns or updates an object like {plantFooded: {at:2018, duration: 200}} suitable for merging into another object (or setting by key)
 
   The idea is that code that only cares about the property can just check if it's truthy, but it wraps up enough data to clear out the prop later."
-  (setf (getprop target key)
-        (merge (create :at (time))
-               (create :duration (if (defined duration)
-                                     duration
-                                     (default-duration key)))))
-  target)
+  (let ((prop-duration (if (defined duration)
+                      duration
+                      (default-duration key))))
+    (assoc key
+           (create :at (time)
+                   :duration prop-duration)
+           (create))))
 
 (defun is-expired-temp-prop (obj)
   (and obj
@@ -77,63 +112,85 @@
   (or (get 'default-durations key) (get 'default-durations 'default)))
 
 ;;; Zombie
-(defun randomIntBelow (n)
+(defun random-int-below (n)
   (chain +Math (floor (* n ((@ +Math random))))))
 
-(defun plusOrMinus (n)
-  (- n (randomIntBelow (+ 1 (* 2 n)))))
+(defun plus-or-minus (n)
+  (- n (random-int-below (+ 1 (* 2 n)))))
 
-(defun spawn-zombie! (&optional (x 1200))
-  (let* ((x (if ((@ +Number is-finite) x) x 1200))
-         (index (generate-new-mob-index))
-         (zombie (create :x x
-          :y (plusOrMinus 5)
-          :health 10
-          :index index)))
-    (setf (getprop *state* :zombies index) zombie)
-    zombie))
+(defun create-zombie (&optional x)
+  (let* ((x (if ((@ +Number is-finite) x) x (* 9 (constant 'turf-width))))
+         (index (generate-new-mob-index)))
+    (create :x x
+            :y (plus-or-minus 5)
+            :health 10
+            :index index)))
 
-(defun spawn-cone-head! (&optional (x 1200))
-  (let ((zombie (spawn-zombie! x)))
+(defun spawn-zombie! (&optional row x)
+  (let* ((row (if (defined row) row (random-row)))
+         (zombie (create-zombie x)))
+    (setf (getprop *state* :rows row :zombies (@ zombie index))
+          (assoc :row row
+                 zombie))))
+
+(defun spawn-conehead! (row &optional x)
+  (let ((zombie (spawn-zombie! row x)))
     (with-slots (index) zombie
-      (update! 'zombies index (merge zombie
-                                     (create :cone (create :health 21)))))))
+      (update! 'rows (-number row) 'zombies index
+               (merge zombie
+                      (create :cone (create :health 21)))))))
 
-(defun spawn-shot! (&optional (plant (create :x 120 :index 0)))
+(defun create-enemy (type)
+  (case type
+    (:cone (merge (create-zombie)
+                  (create :cone (create :health 21))))
+    (t (create-zombie))))
+
+(defun spawn! (zombie &optional row)
+  (let* ((row (if (defined row) row (random-row))))
+    (setf (getprop *state* :rows row :zombies (@ zombie index))
+          (assoc :row row zombie))))
+
+(defun spawn-shot! (plant)
   (let* ((index (generate-new-mob-index))
          (plant-x (or (and plant (@ plant x)) 0))
-         (x (+ plant-x 60)))
-    (setf (getprop *state* :shots index)
+         (x (+ plant-x 55))
+         (row (@ plant row)))
+    (setf (getprop *state* :rows row :shots index)
           (create x x
-                  y-jiggle (plusOrMinus 5)
+                  y-jiggle (plus-or-minus 5)
                   shooter-id index
                   index index))))
 
-(defun spawn-plant! (&key x)
-  (let* ((x (or x (* 70 (chain (keys (get :plants)) length))))
-         (index (generate-new-mob-index)))
-    (setf (getprop *state* :plants index)
-          (merge default-plant (create x x
-                                       index index)))))
+(defun spawn-plant! (&optional (column 0) (row 0))
+  (let* ((mob-index (generate-new-mob-index)))
+    (setf (getprop *state* :rows row :plants column)
+          (merge default-plant (create x (+ 25 (* column (constant 'turf-width)) 0)
+                                       index mob-index
+                                       column column
+                                       row row)))))
+
 (defun time () (@ *STATE* time))
 
-(defun plant-food! (plant)
-  (update! :plants (@ plant index)
-           (merge plant
-                  (temp-prop 'plant-fooded))))
+(defun plant-food! (column row)
+  (setf (plant column row)
+        (merge (plant column row)
+               (temp-prop 'plant-fooded))))
 
 (defun init-zombies ()
   (mapcar spawn-zombie! (list ;0 90 300 600
                                900)))
 
 (defun alivep (zombie)
-  (not (or (and (defined (@ zombie health))
-                (<= (@ zombie health) 0))
-           ;; for now, kill anything that is out of bounds
-           (and (defined (@ zombie x))
-                (or (<= (@ zombie x) -100)
-                    (<= 1300 (@ zombie x))))
-           (@ zombie :dead))))
+  ;; ironically, we're going to consider undefined and false "alive"
+  (or (not zombie)
+      (not (or (and (defined (@ zombie health))
+                    (<= (@ zombie health) 0))
+               ;; for now, kill anything that is out of bounds
+               (and (defined (@ zombie x))
+                    (or (<= (@ zombie x) -100)
+                        (<= 1300 (@ zombie x))))
+               (@ zombie :dead)))))
 
 (defun walk (zombie)
   (setf (@ zombie x) (- (@ zombie x) 1))
@@ -156,58 +213,114 @@
 (defun plant-food-activep (plant)
   (getprop plant 'plant-fooded))
 
+(defun update-row (row)
+  (with-slots (plants zombies shots) row
+    (let* ((plants     (mapcar #'update-turf plants))
+           (zombies    (update-zombies zombies))
+           (shots      (mapcar #'update-shot shots))
+           (collisions (calculate-collisions row))
+           (new-row    (create 'plants plants
+                               'zombies zombies
+                               'shots shots
+                               'collisions collisions)))
+      (mapcar (filter alivep)
+              (process-collisions new-row collisions)
+              ))
+    )
+  )
+
+(defun update-turf (turf)
+  (and turf
+       (update-plant turf)))
+
+(defun plant (column row)
+  (getprop *state* :rows row :plants column))
+(defun set-plant! (column row value)
+  ;; To merge or not to merge...
+  ;; Not merging for now
+  ;; Also going to listen to the column and row for the setf semantics
+  (setf (getprop *state* :rows row :plants column) value))
+(defsetf plant set-plant!)
+
+(defun save-plant! (plant)
+  (with-slots (column row) plant
+    (setf (plant column row) plant)))
+
+
 (defun update-plant (plant)
-  (let ((plant (filter-out-expired-temp-props plant)))
-    (with-slots (x index time-of-last-shot plant-fooded) (merge default-plant plant)
-      (let* ((current-time (@ *state* time))
-             (time-since-last-shot (- current-time time-of-last-shot))
-             (has-target (not (is-empty (@ *STATE* zombies))))
-             (wants-to-shoot (or has-target
-                                 plant-fooded))
-             (should-shoot (and wants-to-shoot
-                                (shot-is-cool plant))))
-        (merge-all (list (filter-out-expired-temp-props plant)
-                         (create derived (create should-shoot should-shoot
-                                                 time-since-last-shot time-since-last-shot
-                                                 current-time current-time
-                                                 wants-to-shoot wants-to-shoot
-                                                 has-target has-target
-                                                 ))
-                         (and should-shoot
-                              (progn
-                                (spawn-shot! plant)
-                                (create time-of-last-shot current-time)))))))))
+  (if (not plant)
+      plant
+      (let ((plant (filter-out-expired-temp-props plant)))
+        (with-slots (x index time-of-last-shot plant-fooded row) (merge default-plant plant)
+          (let* ((current-time (@ *state* time))
+                 (time-since-last-shot (- current-time time-of-last-shot))
+                 (my-row (getprop *state* :rows row))
+                 (has-target (not (is-empty (@ my-row zombies))))
+                 (wants-to-shoot (or has-target
+                                     plant-fooded))
+                 (should-shoot (and wants-to-shoot
+                                    (shot-is-cool plant)))
+                 (derived-props (create should-shoot should-shoot
+                                        time-since-last-shot time-since-last-shot
+                                        current-time current-time
+                                        wants-to-shoot wants-to-shoot
+                                        has-target has-target
+                                                     )))
+            (merge-all (list (filter-out-expired-temp-props plant)
+;                             (create derived derived-props)
+                             (and should-shoot
+                                  (progn
+                                    (spawn-shot! plant)
+                                    (merge (create time-of-last-shot current-time)
+                                           (temp-prop :shooting 10)))))))))))
 
 (defun update-shot (a-shot)
   (setf (@ a-shot x) (+ (constant 'shot-speed) (@ a-shot x)))
   a-shot)
 
+(defun init-zombie-generator ()
+  (create 'wave-count 0
+          'zombies-spawned 0
+          'zombie-queue (list)))
 ;;; State
 (defun init-state! ()
   ;; I only need this clone because I'm a naughty mutator :p
+  (let ((preserved-running (if (and (defined *state*)
+                                    (defined (@ *state* running)))
+                             (@ *state* running)
+                             (@ initial-state running)))))
   (setf *state* (clone initial-state))
-  (init-zombies)
+  (update! 'running preserved-running)
   (setf (@ *state* callbacks) (create :spawn-zombie (lambda () (spawn-zombie!))))
-  (update! :constants
-           (create 'plant-shot-cooldown 150
-                   'plant-fooded-shot-count 50
-                   shot-speed 4))
-  (update! 'default-durations
-           (create default 200
-                   plant-fooded 100))
+  (update! 'constants 'plant-fooded-shot-count 50)
+  (update! 'constants 'shot-speed 2)
+  (update! 'constants 'turf-width 100)
+  (update! 'constants 'zombie-walking-speed 0.05)
+  (update! 'constants 'plant-shot-cooldown (/ 30 (constant 'zombie-walking-speed)))
+  (set-constant 'pause-between-zombies (/ 30 (constant 'zombie-walking-speed)))
+  (update! 'default-durations 'default 200)
+  (update! 'default-durations 'plant-fooded 100)
+  (update! 'default-durations 'cooldown-queue-zombies (/ 400 (constant 'zombie-walking-speed)))
+  ;; Magic init?
+  (update! 'zombie-generator (init-zombie-generator))
   *state*
+  )
+
+(defun set-constant (key value)
+  "Ah, delicious irony"
+  (update! 'constants key value)
   )
 
 (defun update-zombie (zombie)
   ;; Sorry mutation
-  (setf (@ zombie x) (- (@ zombie x) 0.1))
+  (setf (@ zombie x) (- (@ zombie x) (constant 'zombie-walking-speed)))
   ;; Strip armour, not checking the zombie itself
   (filter alivep zombie)
   )
 
-(defun update-zombies ()
-  (setf (@ *state* zombies) (mapcar update-zombie (@ *state* zombies)))
-  )
+(defun update-zombies (zombies)
+  (filter alivep
+          (mapcar #'update-zombie zombies)))
 
 (defun pause ()
   (setf (@ *state* running) false)
@@ -222,14 +335,15 @@
   (let* ((zombies (obj-values zombies)))
     (reduce (min-by (prop :x)) (head zombies) (tail zombies))))
 
-(defun calculate-collisions ()
-  (let ((front-zombie (left-most (@ *state* zombies))))
-    (if front-zombie (progn
-                       (setf (@ *state* front-zombie) front-zombie)
-                       (loop for a-shot in (shots)
-                          when (<= (@ front-zombie x) (@ a-shot x))
-                          collect (create :shot a-shot :zombie front-zombie)))
-        (list))))
+(defun calculate-collisions (row)
+  (with-slots (zombies shots) row
+    (let ((front-zombie (left-most zombies)))
+      (if front-zombie (progn
+                         (setf (@ row front-zombie) front-zombie)
+                         (loop for a-shot in (obj-values shots)
+                            when (<= (@ front-zombie x) (@ a-shot x))
+                            collect (create :shot a-shot :zombie front-zombie :row row)))
+          (list)))))
 
 (defun find-armor (mob)
   "Returns a path to the health that should be decremented e.g. a plant's health, or a zombie's bucket"
@@ -243,34 +357,60 @@
          (health (path health-path mob)))
     (assoc-path health-path (- health damage) mob)))
 
-(defun process-collision! (collision)
-  (with-slots (shot zombie) collision
+(defun process-collision (row collision)
+  (with-slots (shot zombie row) collision
     (let* ((zombie-id (@ zombie :index))
-           (the-zombie (getprop *state* :zombies zombie-id))
+           (the-zombie (getprop row :zombies zombie-id))
            (shot-id (@ shot :index)))
-      (setf (getprop *state* :zombies zombie-id) (hurt the-zombie))
-      (setf (getprop *state* :shots shot-id :dead) t))))
+      (setf (getprop row :zombies zombie-id) (hurt the-zombie))
+      (setf (getprop row :shots shot-id :dead) t)
+      row)
+    ))
 
-(defun process-collisions! ()
-  (mapcar process-collision! (@ *state* :collisions))
+(defun process-collisions (row collisions)
+  (reduce #'process-collision row collisions)
   )
 
-(defun shots ()
- (obj-values (@ *state* shots)))
+(setf #'filter-dead (filter ((@ *R* negate) (prop :dead))))
 
-(setf #'fitler-dead (filter ((@ *R* negate) (prop :dead))))
+(defun find-zombie ()
+  (find (complement is-empty)
+        (obj-values (mapcar (pipe (prop :zombies)) (@ *state* rows)))))
+
+(defun random-row ()
+  (random-int-below (chain (keys (@ *state* :rows)) length)))
+
+(defun queue-zombies (zombie-generator)
+  (with-slots (cooldown-queue-zombies zombie-queue wave-count)
+      (filter-out-expired-temp-props zombie-generator)
+    (if (and cooldown-queue-zombies (find-zombie))
+        zombie-generator
+        (merge zombie-generator
+               (temp-prop 'cooldown-queue-zombies)
+               (create zombie-queue (concat zombie-queue (list t t t :cone))
+                       wave-count (+ 1 wave-count))))))
+
+;;; I can't decide if this is part of a pipeline or should be OO
+(defun generate-zombie (zombie-generator)
+  (with-slots (pause-between-zombies zombie-queue zombies-spawned) zombie-generator
+    (if (or pause-between-zombies (is-empty zombie-queue))
+        zombie-generator
+        (let ((new-zombie-type (car zombie-queue))
+              (row (random-row)))
+          (spawn! (create-enemy new-zombie-type) row)
+               (merge zombie-generator
+                      (temp-prop 'pause-between-zombies)
+                      (create 'zombies-spawned (+ 1 zombies-spawned)
+                              'zombie-queue (drop 1 zombie-queue)))))))
+
+(defun update-zombie-generator (zombie-generator)
+  ((pipe #'filter-out-expired-temp-props #'queue-zombies #'generate-zombie) zombie-generator))
 
 (defun tick! ()
   "update all the things"
   (setf (@ *state* time) (+ 1 (@ *state* time)))
-  (update-zombies)
 
-  (setf (@ *state* :shots) (mapcar #'update-shot (@ *state* :shots)))
-  (setf (@ *state* :plants) (mapcar #'update-plant (@ *state* :plants)))
-
-  (setf (@ *state* :collisions) (calculate-collisions))
-  (process-collisions!)
-
-  (setf (@ *state* :shots) (filter alivep (@ *state* :shots)))
-  (setf (@ *state* :zombies) (filter alivep (@ *state* :zombies)))
+  (setf (@ *state* :rows) (mapcar #'update-row (@ *state* :rows)))
+  (setf (@ *state* 'zombie-generator) (update-zombie-generator (@ *state* 'zombie-generator)))
+  *state*
   )

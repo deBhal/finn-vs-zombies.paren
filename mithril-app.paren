@@ -31,7 +31,8 @@
                     :style (create :position "absolute"
                                    :float :left
                                    :left (px x)
-                                   :margin-top (px y-jiggle))))))
+                                   :transform (+ "translateY(" (px y-jiggle) ")")))
+       nil)))
 
 ;; It takes 7 shots for the first stage of damage
 ;; It takes 6 more shots for the second stage
@@ -40,75 +41,162 @@
 ;; Oddly, in pvz the resulting brown-coat has one less health than normal
 ;; after it's arm falls off (5,4 shots instead of 5,5)
 ;; but I'm not going to bother with that detail
-(defun cone (&optional (health 21))
-  (m :img (cond ((< 14 health) (create :class "cone"
-                                       :src "./assets/cone.png"))
-                ((< 8 health) (create :class "cone damaged"
-                                      :src "./assets/cone-2.png"))
-                (t            (create :class "cone badly-damaged"
-                                      :src "./assets/cone-3.png")))))
+(defun cone (index &optional (health 21))
+  (let* ((_attrs (cond ((< 14 health) (create :class "cone"
+                                              :src "./assets/cone.png"))
+                       ((< 8 health)  (create :class "cone damaged"
+                                              :src "./assets/cone-2.png"))
+                       (t             (create :class "cone badly-damaged"
+                                              :src "./assets/cone-3.png"))))
+         (attrs (chain -object (assign _attrs
+                                       (create :index index
+                                               :key (+ "cone-" index))))))
+    (m :img attrs)))
 
 (defun mzombie (props)
-  (m :div (create :key (@ props :index)
-                  :class "zombie"
-                  :style (create :left (px (@ props x))
-                                 :top (px  (@ props y))
-                                 :top-margin (px (@ props y-offset))
-                                 :position "absolute"))
-     (m :img (create
-              :src "./assets/zombie.png"))
-     (and (@ props cone) (cone (@ props cone health)))))
+  (with-slots (index x y y-offset cone) props
+    (let ((key (+ "zombie-" index)))
+      (m :div (create :key key
+                      :data-key key
+                      :class "zombie"
+                      :style (create :left (px x)
+                                     :margin-bottom (px y)))
+         (m :img (create
+                  :src "./assets/zombie.png"
+                  :key (+ "img-" key)))
+         (if cone (cone index (@ props cone health)) nil)))))
 
-(defun peashooter (&optional (props (create :x 250)))
-  (m :img (create :key :pea
-                  :src "./assets/pea-shooter-pixelated.png"
-                  :onclick (lambda (event)
-                             (plant-food! props)
-                             ((@ event "stopPropagation"))
-                             )
-                  :style (create :position :absolute
-                                 :left (px (@ props x))
-                                 :top "25%"))))
+
+(defun peashooter-onclick (event)
+  ((@ event "stopPropagation"))
+  (aif (@ event target dataset)
+       (with-slots (column row) it
+         (progn
+           (plant-food! column row)))
+       (clog "missing dataset in peashooter-onclick event:" event)))
+
+(defun peashooter (props)
+  (with-slots (x shooting index row column) props
+    (let ((key (+ "peashooter-" index)))
+      (m :img (create :key key
+                      :data-index index
+                      :data-key key
+                      :data-row row :data-column column
+                      :class (+ "plant peashooter"
+                                (if shooting " shooting" ""))
+                      :src "./assets/pea-shooter-pixelated.png"
+                      :onclick peashooter-onclick
+                      :style (style-stringify (create :left (px x))))
+         ;; This nil seems important to prevent unnecessary re-renders,
+         ;; which in turn breaks onclick events
+         nil))))
+
+(defun turf-click (event)
+  (with-slots (column row) (@ event target dataset)
+    (spawn-plant! column row)))
+
+(defun style-entry-from-value-key (value key)
+  (+ key ":" value ";"))
+
+;;; Using a string instead of an object might let mithril skip the re-draw
+(defun style-stringify (style)
+  (join ""
+   (obj-values
+    (map-obj-indexed style-entry-from-value-key style))))
+
+(defun mturf (props column row)
+  (let ((key (+ "turf-" column)))
+    (m :div (create :class "turf"
+                    :key key
+                    :data-key key
+                    :data-row row
+                    :data-column column
+                    :onclick #'turf-click
+                    :style (+ "width:" (constant 'turf-width) "px;"
+                              "background-color:" (if (mod (+ (+Number column) (+Number row)) 2)
+                                                      'lightgreen
+                                                      'darkgreen) ";"))
+       (aif (and props (peashooter props)) it nil))))
+
+(defun mrow (props row-index)
+  (let ((key (+ "row-" row-index)))
+    (m "div" (create :class "row"
+                     :key key
+                     :data-key key)
+       (with-slots (plants zombies shots) props
+         (reduce concat (list)
+                 (list
+                  (obj-values
+                   (map-obj-indexed (lambda (props column)
+                                  (mturf props column row-index))
+                                plants))
+                  (mapcar mzombie (obj-values zombies))
+                  (mapcar shot (obj-values shots))
+                  (list (m "button" (create :key (+ "spawn-zombie" row-index)
+                                            :data-row row-index
+                                            :onclick mspawn-zombie!) "Spawn Zombie")
+                        (m "button" (create :key (+ "spawn-conehead" row-index)
+                                            :data-row row-index
+                                            :onclick mspawn-conehead!) "Spawn Cone-Head"))))))))
+
+(defun thunked-mrender ()
+  ((@ window mrender)))
+
+(defun mreset ()
+  (init-state!)
+  (mrender)
+  )
 
 (defun mapp ()
-  (m "div" (create :id "mapp"  :position "relative")
-     (m "div" (create :class-name "row"
-                      :onclick #'spawn-zombie!
-                      :style (create :position "relative"
-                                     :height "140px"
-                                     :background-color "#afa"))
-        (mapcar peashooter (obj-values (@ *state* plants)))
-        (mapcar mzombie (obj-values (@ *state* zombies)))
-        (mapcar shot (shots))
-        )
-     (m "button" (create :onclick #'play-pause) (if (@ *state* running) "Pause" "Play"))
-     (and (not (@ *state* running)) (m "button" (create :onclick #'step) "step"))
-     (m "button" (create :onclick (@ window spawn-zombie!)) "Spawn Zombie")
-     (m "button" (create :onclick (@ window spawn-cone-head!)) "Spawn Cone-Head")
-     (m "button" (create :onclick (@ window spawn-plant!)) "Spawn Plant")
-     (m "button" (create :onclick (@ window init-state!)) "Reset")
-     (m "pre" (create :style (create :position "relative"))
-        (chain *JSON* (stringify (create :state *state*
-                                         )
-                                 nil
-                                 2)))
-     )
-  )
+  ;; Note, don't use lamdas in here as they cause unnecessary rerenders
+  ;; (by never being equal to themselves)
+  (m "div" (create :id "mapp" :key "mapp" :data-key "mapp" :position "relative")
+     (m "div" (create :id "field" :class "field" :key "field" :data-key "field")
+        (obj-values (map-obj-indexed mrow (@ *state* rows))))
+     (m "button" (create :key "play-pause" :id "play-pause" :onclick #'play-pause) (if (@ *state* running) "Pause" "Play"))
+     (if (@ *state* running) nil (m "button" (create :key "step" :onclick #'step) "step"))
+     (m "button" (create :key "reset" :onclick #'mreset) "Reset")
+     ;; Thunk here to pick up a (debug-once "mrender") immediately
+     (m "button" (create :key "render" :onclick #'thunked-mrender) "Render")
+     (m "pre" (create :id "state" :key "state" :style (style-stringify (create :position "relative")))
+        (chain *JSON* (stringify (create :state *state*) nil 2)))))
 
 (defun mrender ()
   (chain m (render mcontainer (mapp)))
   )
 
+(defun mspawn-zombie! (event)
+  (spawn-zombie! (@ event target dataset row)))
+
+(defun mspawn-conehead! (event)
+  ;; (clog "conehead" event (@ event target dataset row))
+  (spawn-conehead! (@ event target dataset row)))
+
+(defun debug-once (func)
+  (let ((real-func (getprop window func)))
+    (setf (getprop window func)
+          (lambda (&rest args)
+            (setf (getprop window func) real-func)
+            debugger
+            (apply real-func args)))))
+
+(defun next-loop ()
+  (request-animation-frame #'main-loop))
+
+(defun timeout-next-loop ()
+  (set-timeout #'next-loop))
+
 ; UI Glue, depends on react-app.paren
 (defun main-loop ()
   (try
    (and (@ *state* running) (step))
-   (:finally (request-animation-frame #'main-loop))))
+   (:finally (timeout-next-loop))))
 
 ;;;  GO!
 (init-state!)
 (main-loop)
 
 (defun step ()
+  (mrender)
   (tick!)
-  (mrender))
+  )
