@@ -12,7 +12,8 @@
 (setf reduce-indexed (add-index reduce))
 
 ;;; Notes: false gets normalized to ""
-;;; What about null?
+;;; null gets normalized to null
+;;; undefined gets normalized to undefined
 
 (defun px (n)
   (+ n "px"))
